@@ -12,7 +12,11 @@ document.addEventListener('DOMContentLoaded', () => {
     initialisiereExtraAbhaengigkeiten();
     initialisiereReihenfolgeDragDrop();
 
-    
+    const undoButton = document.getElementById('btn-undo-last');
+    if (undoButton) {
+        undoButton.addEventListener('click', undoLetztesSpiel);
+    }
+
     // Event-Listener für den Start-Button
     document.getElementById('btn-start').addEventListener('click', startePartie);
     
@@ -200,6 +204,73 @@ async function ladeStand() {
             </tr>
         `)
         .join('');
+
+    // Undo-Button entsprechend Backend-Info aktivieren/deaktivieren
+    const undoButton = document.getElementById('btn-undo-last');
+    if (undoButton) {
+        if (typeof daten.undo_moeglich === 'boolean') {
+            undoButton.disabled = !daten.undo_moeglich;
+        } else {
+            // Fallback: erlaubt Undo, solange es mindestens ein Spiel in der Historie gibt
+            undoButton.disabled = !(daten.historie && daten.historie.length > 0);
+        }
+    }
+}
+
+async function undoLetztesSpiel() {
+    const bestaetigt = window.confirm('Letztes Spiel wirklich löschen?');
+    if (!bestaetigt) {
+        return;
+    }
+
+    const res = await fetch('/api/spiel/undo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+    });
+
+    const undoButton = document.getElementById('btn-undo-last');
+
+    if (res.ok) {
+        const daten = await res.json();
+
+        const geberId = daten && typeof daten.geber_id === 'number' ? daten.geber_id : null;
+
+        if (geberId !== null && Array.isArray(aktiveIDs) && aktiveIDs.length > 0) {
+            const index = aktiveIDs.indexOf(geberId);
+            if (index !== -1) {
+                geberIndex = index;
+            } else {
+                geberIndex = (geberIndex - 1 + aktiveIDs.length) % aktiveIDs.length;
+            }
+        } else if (Array.isArray(aktiveIDs) && aktiveIDs.length > 0) {
+            geberIndex = (geberIndex - 1 + aktiveIDs.length) % aktiveIDs.length;
+        }
+
+        aktualisiereAnzeige();
+        await ladeStand();
+
+        if (undoButton) {
+            undoButton.disabled = true;
+        }
+    } else {
+        let fehlerNachricht = 'Fehler beim Zurücknehmen des letzten Spiels.';
+        if (res.status === 400 || res.status === 409) {
+            try {
+                const daten = await res.json();
+                if (daten && daten.error) {
+                    fehlerNachricht = daten.error;
+                }
+            } catch {
+                // Ignorieren, Standardmeldung verwenden
+            }
+        }
+
+        if (undoButton) {
+            undoButton.disabled = true;
+        }
+
+        window.alert(fehlerNachricht);
+    }
 }
 
 function ermittleAktiveIDsAusReihenfolge() {

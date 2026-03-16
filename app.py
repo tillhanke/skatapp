@@ -5,6 +5,10 @@ from flask import Flask, request, jsonify
 # --- Konfiguration ---
 DB_DATEI = "skat_daten.db"
 
+# --- Undo-Status (in-memory, pro Prozess) ---
+# Merkt sich, für welches Spiel (id) die Undo-Funktion bereits genutzt wurde.
+_last_undo_game_id = None
+
 # Wir konfigurieren Flask so, dass es statische Dateien (wie index.html) 
 # direkt aus dem aktuellen Ordner ('.') ausliefert.
 app = Flask(__name__, static_folder='.', static_url_path='')
@@ -18,6 +22,23 @@ def hole_verbindung():
     # Das macht die Umwandlung in JSON für das Frontend später extrem einfach.
     verbindung.row_factory = sqlite3.Row 
     return verbindung
+
+
+def hole_letztes_spiel():
+    """Lädt das zuletzt gespeicherte Spiel (nach id)."""
+    verbindung = hole_verbindung()
+    cursor = verbindung.cursor()
+    cursor.execute(
+        """
+        SELECT id, geber_id
+        FROM spiel
+        ORDER BY id DESC
+        LIMIT 1
+        """
+    )
+    zeile = cursor.fetchone()
+    verbindung.close()
+    return zeile
 
 
 def berechne_spielwert(
@@ -110,6 +131,7 @@ def hole_spieler():
 
 @app.route('/api/spiel', methods=['POST'])
 def speichere_spiel():
+    global _last_undo_game_id
     daten = request.json
     verbindung = hole_verbindung()
     cursor = verbindung.cursor()
@@ -144,11 +166,54 @@ def speichere_spiel():
     cursor.execute(sql, werte)
     verbindung.commit()
     verbindung.close()
+
+    # Nach erfolgreichem Speichern ist Undo für dieses neue Spiel wieder möglich.
+    _last_undo_game_id = None
     return jsonify({"status": "erfolg", "spielwert": spielwert}), 201
+
+
+@app.route('/api/spiel/undo', methods=['POST'])
+def undo_letztes_spiel():
+    """
+    Entfernt genau das zuletzt gespeicherte Spiel.
+
+    Die Funktion kann pro Spiel nur einmal genutzt werden:
+    Wurde das aktuelle letzte Spiel bereits zurückgenommen, ist ein weiteres Undo
+    erst nach dem nächsten neu gespeicherten Spiel möglich.
+    """
+    global _last_undo_game_id
+
+    zeile = hole_letztes_spiel()
+    if zeile is None:
+        return jsonify({"error": "Kein Spiel vorhanden, das zurückgenommen werden kann."}), 400
+
+    last_id = zeile["id"]
+    geber_id = zeile["geber_id"]
+
+    # Wurde für dieses Spiel bereits ein Undo ausgeführt?
+    if _last_undo_game_id == last_id:
+        return jsonify({"error": "Das letzte Spiel wurde bereits zurückgenommen."}), 409
+
+    verbindung = hole_verbindung()
+    cursor = verbindung.cursor()
+    cursor.execute("DELETE FROM spiel WHERE id = ?", (last_id,))
+    verbindung.commit()
+    verbindung.close()
+
+    _last_undo_game_id = last_id
+
+    return jsonify(
+        {
+            "status": "erfolg",
+            "entfernte_spiel_id": last_id,
+            "geber_id": geber_id,
+        }
+    ), 200
 
 @app.route('/api/stand', methods=['GET'])
 def hole_punktestand():
     """Berechnet den aktuellen Punktestand und lädt die letzten 10 Spiele."""
+    global _last_undo_game_id
     verbindung = hole_verbindung()
     cursor = verbindung.cursor()
     
@@ -194,13 +259,22 @@ def hole_punktestand():
         LEFT JOIN spieler spi ON sp.einzelspieler_id = spi.id
         ORDER BY sp.id DESC LIMIT 10
     ''')
-    historie = [dict(row) for row in cursor.fetchall()]
+    historie_zeilen = cursor.fetchall()
+    historie = [dict(row) for row in historie_zeilen]
+
+    # Prüfen, ob das Zurücknehmen des letzten Spiels aktuell möglich ist.
+    # Basis: letztes Spiel = höchste id in der Historie.
+    undo_moeglich = False
+    if historie_zeilen:
+        letztes_spiel_id = historie_zeilen[0]["id"]
+        undo_moeglich = (_last_undo_game_id != letztes_spiel_id)
     
     verbindung.close()
     
     return jsonify({
         "punktestand": punktestand,
-        "historie": historie
+        "historie": historie,
+        "undo_moeglich": undo_moeglich,
     })
 
 
