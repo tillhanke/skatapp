@@ -149,6 +149,23 @@
                     </tbody>
             </table>
         </section>
+
+        <!-- Modal für Spiel-Übersicht vor dem endgültigen Speichern -->
+        <div id="spiel-preview-overlay" role="dialog" aria-modal="true" style="display: none;">
+            <div id="spiel-preview-dialog">
+                <h2>Spiel überprüfen</h2>
+                <p class="hinweis">
+                    Bitte prüfe die eingegebenen Daten. Das Spiel wird erst nach Bestätigung gespeichert.
+                </p>
+                <div id="spiel-preview-body">
+                    <!-- Inhalte werden dynamisch per JavaScript befüllt -->
+                </div>
+                <div id="spiel-preview-actions">
+                    <button type="button" id="btn-preview-cancel">Zurück und bearbeiten</button>
+                    <button type="button" id="btn-preview-confirm">Spiel endgültig speichern</button>
+                </div>
+            </div>
+        </div>
     </main>
 
     <script src="script.js"></script>

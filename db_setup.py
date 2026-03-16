@@ -1,4 +1,4 @@
-#!/home/hanke/src/skatapp/.venv/bin/python
+#!.venv/bin/python
 import sqlite3
 import argparse
 

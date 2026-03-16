@@ -3,6 +3,7 @@ let alleSpielerinnen = [];
 let aktiveIDs = [];
 let geberIndex = 0; // Wer in der Liste der Aktiven gibt gerade
 let gezogenesReihenfolgeElement = null; // Für Drag & Drop der Sitzreihenfolge
+let aktuellesSpielDraft = null; // Zwischenspeicher für die Bestätigungs-Übersicht
 
 // --- Initialisierung ---
 document.addEventListener('DOMContentLoaded', () => {
@@ -22,6 +23,16 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Event-Listener für das Formular
     document.getElementById('form-spiel').addEventListener('submit', speichereSpiel);
+
+    // Event-Listener für das Bestätigungs-Modal
+    const previewCancel = document.getElementById('btn-preview-cancel');
+    const previewConfirm = document.getElementById('btn-preview-confirm');
+    if (previewCancel) {
+        previewCancel.addEventListener('click', abbrecheSpielVorschau);
+    }
+    if (previewConfirm) {
+        previewConfirm.addEventListener('click', bestaetigeUndSpeichereSpiel);
+    }
 });
 
 // --- Funktionen ---
@@ -161,19 +172,9 @@ async function speichereSpiel(e) {
         augen: augenWert
     };
 
-    const res = await fetch('/api/spiel', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(daten)
-    });
-
-    if (res.ok) {
-        // Geber weiterrücken
-        geberIndex = (geberIndex + 1) % aktiveIDs.length;
-        document.getElementById('form-spiel').reset();
-        aktualisiereAnzeige();
-        ladeStand();
-    }
+    // Daten nur zwischenspeichern und Bestätigungs-Übersicht anzeigen
+    aktuellesSpielDraft = daten;
+    zeigeSpielVorschau(daten);
 }
 
 async function ladeStand() {
@@ -214,6 +215,102 @@ async function ladeStand() {
             // Fallback: erlaubt Undo, solange es mindestens ein Spiel in der Historie gibt
             undoButton.disabled = !(daten.historie && daten.historie.length > 0);
         }
+    }
+}
+
+function zeigeSpielVorschau(daten) {
+    const overlay = document.getElementById('spiel-preview-overlay');
+    const body = document.getElementById('spiel-preview-body');
+    if (!overlay || !body) {
+        return;
+    }
+
+    const einzelName = daten.einzelspieler_id === null
+        ? 'Eingepasst'
+        : (alleSpielerinnen.find(p => p.id === daten.einzelspieler_id)?.name || `Spielerin ${daten.einzelspieler_id}`);
+
+    const spitzenAnzahl = Math.abs(daten.spitzen || 0);
+    const mitOhneText = (daten.spitzen || 0) >= 0 ? 'mit' : 'ohne';
+
+    const extras = [];
+    if (daten.hand) extras.push('Hand');
+    if (daten.ouvert) extras.push('Ouvert');
+    if (daten.schneider_angesagt) extras.push('Schneider angesagt');
+    if (daten.schwarz_angesagt) extras.push('Schwarz angesagt');
+    if (daten.schwarz_erreicht) extras.push('Schwarz erreicht');
+
+    let augenText = '-';
+    if (daten.spielart === 'Null') {
+        augenText = daten.augen === 0 ? 'Null gewonnen' : 'Null verloren';
+    } else if (daten.spielart === 'Eingepasst') {
+        augenText = 'Keine Augen (eingepasst)';
+    } else if (daten.schwarz_angesagt) {
+        augenText = daten.schwarz_erreicht ? 'Schwarz gewonnen' : 'Schwarz nicht erreicht';
+    } else {
+        augenText = `${daten.augen} Augen`;
+    }
+
+    const geberID = daten.geber_id;
+    const geberName = alleSpielerinnen.find(p => p.id === geberID)?.name || `Spielerin ${geberID}`;
+
+    body.innerHTML = `
+        <dl>
+            <dt>Geberin</dt>
+            <dd>${geberName}</dd>
+            <dt>Einzelspielerin</dt>
+            <dd>${einzelName}</dd>
+            <dt>Spielart</dt>
+            <dd>${daten.spielart}</dd>
+            <dt>Reizwert</dt>
+            <dd>${daten.reizwert}</dd>
+            <dt>Spitzen</dt>
+            <dd>${mitOhneText} ${spitzenAnzahl}</dd>
+            <dt>Extras</dt>
+            <dd>${extras.length ? extras.join(', ') : 'Keine'}</dd>
+            <dt>Ergebnis / Augen</dt>
+            <dd>${augenText}</dd>
+        </dl>
+        <p style="margin-top: 10px;">
+            Die genaue Punktewertung siehst du nach dem Speichern im Dashboard.
+        </p>
+    `;
+
+    overlay.style.display = 'flex';
+}
+
+function abbrecheSpielVorschau() {
+    const overlay = document.getElementById('spiel-preview-overlay');
+    if (overlay) {
+        overlay.style.display = 'none';
+    }
+}
+
+async function bestaetigeUndSpeichereSpiel() {
+    if (!aktuellesSpielDraft) {
+        abbrecheSpielVorschau();
+        return;
+    }
+
+    const overlay = document.getElementById('spiel-preview-overlay');
+    if (overlay) {
+        overlay.style.display = 'none';
+    }
+
+    const res = await fetch('/api/spiel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(aktuellesSpielDraft)
+    });
+
+    if (res.ok) {
+        // Geber weiterrücken
+        geberIndex = (geberIndex + 1) % aktiveIDs.length;
+        document.getElementById('form-spiel').reset();
+        aktuellesSpielDraft = null;
+        aktualisiereAnzeige();
+        ladeStand();
+    } else {
+        window.alert('Fehler beim Speichern des Spiels.');
     }
 }
 

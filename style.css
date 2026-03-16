@@ -102,3 +102,58 @@ th {
     padding: 10px;
     border-left: 4px solid #3498db;
 }
+
+/* Modal für Spiel-Übersicht */
+#spiel-preview-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 16px;
+}
+
+#spiel-preview-dialog {
+    background: #ffffff;
+    max-width: 480px;
+    width: 100%;
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+    padding: 20px;
+}
+
+#spiel-preview-dialog h2 {
+    margin-top: 0;
+    margin-bottom: 10px;
+}
+
+#spiel-preview-body {
+    margin-top: 10px;
+    margin-bottom: 16px;
+}
+
+#spiel-preview-body dl {
+    margin: 0;
+}
+
+#spiel-preview-body dt {
+    font-weight: bold;
+    margin-top: 6px;
+}
+
+#spiel-preview-body dd {
+    margin: 0 0 4px 0;
+}
+
+#spiel-preview-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+#spiel-preview-actions button {
+    flex: 1 1 120px;
+}
