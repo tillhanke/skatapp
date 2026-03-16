@@ -1,0 +1,11 @@
+services:
+  skatapp:
+    build: .
+    container_name: skatapp
+    ports:
+      # App listens on port 5000
+      - "5002:5000"
+    volumes:
+      # Persist the SQLite DB file on the host
+      - ./skat_daten.db:/app/skat_daten.db
+    restart: unless-stopped
