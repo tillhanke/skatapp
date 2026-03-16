@@ -133,6 +133,17 @@ def hole_spieler():
 def speichere_spiel():
     global _last_undo_game_id
     daten = request.json
+
+    aktive_str = daten.get('aktive_spieler_ids', '')
+    aktive_ids_liste = [teil.strip() for teil in aktive_str.split(',') if teil.strip()]
+    if len(aktive_ids_liste) != 3:
+        return jsonify(
+            {
+                "error": "aktive_spieler_ids muss genau drei Spielerinnen enthalten.",
+                "aktive_spieler_ids": aktive_str,
+            }
+        ), 400
+
     verbindung = hole_verbindung()
     cursor = verbindung.cursor()
     
@@ -245,6 +256,9 @@ def hole_punktestand():
     ''')
     punktestand = [dict(row) for row in cursor.fetchall()]
     
+    # Mapping Spieler-ID -> Name für spätere Anzeige (z.B. Gegenspielerinnen)
+    spieler_id_zu_name = {eintrag["id"]: eintrag["name"] for eintrag in punktestand}
+
     # 2. Historie: Die letzten 10 Spiele abrufen
     cursor.execute('''
         SELECT 
@@ -254,13 +268,32 @@ def hole_punktestand():
             sp.reizwert, 
             sp.spielwert, 
             sp.einzelspieler_id,
+            sp.aktive_spieler_ids,
             COALESCE(spi.name, 'Eingepasst') AS einzelspieler_name
         FROM spiel sp
         LEFT JOIN spieler spi ON sp.einzelspieler_id = spi.id
         ORDER BY sp.id DESC LIMIT 10
     ''')
     historie_zeilen = cursor.fetchall()
-    historie = [dict(row) for row in historie_zeilen]
+
+    historie = []
+    for zeile in historie_zeilen:
+        eintrag = dict(zeile)
+
+        aktive_str = eintrag.get("aktive_spieler_ids") or ""
+        aktive_ids = [int(teil) for teil in aktive_str.split(",") if teil.strip()]
+        einzel_id = eintrag.get("einzelspieler_id")
+
+        gegner_ids = []
+        if einzel_id is not None:
+            gegner_ids = [sid for sid in aktive_ids if sid != einzel_id]
+
+        gegner_namen = [
+            spieler_id_zu_name.get(sid, f"Spielerin {sid}") for sid in gegner_ids
+        ]
+
+        eintrag["gegnerinnen"] = ", ".join(gegner_namen)
+        historie.append(eintrag)
 
     # Prüfen, ob das Zurücknehmen des letzten Spiels aktuell möglich ist.
     # Basis: letztes Spiel = höchste id in der Historie.

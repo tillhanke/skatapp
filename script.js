@@ -60,7 +60,8 @@ async function ladeSpielerinnen() {
 
 function startePartie() {
     const gewaehlteCheckboxen = document.querySelectorAll('.spieler-opt:checked');
-    aktiveIDs = Array.from(gewaehlteCheckboxen).map(cb => parseInt(cb.value));const gewaehltIDs = Array.from(gewaehlteCheckboxen).map(cb => parseInt(cb.value));
+    aktiveIDs = Array.from(gewaehlteCheckboxen).map(cb => parseInt(cb.value));
+    const gewaehltIDs = Array.from(gewaehlteCheckboxen).map(cb => parseInt(cb.value));
 
     // Sicherheitsnetz: ohne gültige Auswahl keine Partie starten
     if (gewaehltIDs.length < 3 || gewaehltIDs.length > 5) {
@@ -99,13 +100,8 @@ function startePartie() {
     document.getElementById('spiel-bereich').style.display = 'block';
     document.getElementById('dashboard-bereich').style.display = 'block';
     
-    // Einzelspieler-Dropdown füllen
-    const select = document.getElementById('einzelspieler');
-    select.innerHTML = '<option value="">-- Eingepasst --</option>';
-    aktiveIDs.forEach(id => {
-        const s = alleSpielerinnen.find(p => p.id === id);
-        select.innerHTML += `<option value="${id}">${s.name}</option>`;
-    });
+    // Einzelspieler-Dropdown initial für die aktuellen aktiven Spielerinnen füllen
+    aktualisiereEinzelspielerDropdown();
 
     aktualisiereAnzeige();
     ladeStand();
@@ -118,10 +114,66 @@ function aktualisiereAnzeige() {
     document.getElementById('anzeige-geber').textContent = geberName;
 }
 
+function berechneAktiveSpielerinnen() {
+    const anzahl = aktiveIDs.length;
+    const geberId = aktiveIDs[geberIndex];
+
+    if (anzahl === 3) {
+        return {
+            aktiveDreiIds: aktiveIDs.slice(),
+            aussetzendeIds: [],
+            geberId: geberId
+        };
+    }
+
+    if (anzahl === 4) {
+        const aktiveDreiIds = aktiveIDs.filter((id, index) => index !== geberIndex);
+        const aussetzendeIds = [geberId];
+        return { aktiveDreiIds, aussetzendeIds, geberId };
+    }
+
+    if (anzahl === 5) {
+        const vorspielerinIndex = (geberIndex - 1 + anzahl) % anzahl;
+        const aussetzendeIds = [];
+        aussetzendeIds.push(geberId);
+        aussetzendeIds.push(aktiveIDs[vorspielerinIndex]);
+
+        const aussetzendeSet = new Set(aussetzendeIds);
+        const aktiveDreiIds = aktiveIDs.filter(id => !aussetzendeSet.has(id));
+        return { aktiveDreiIds, aussetzendeIds, geberId };
+    }
+
+    // Fallback: falls etwas inkonsistent ist, alle als aktiv betrachten
+    return {
+        aktiveDreiIds: aktiveIDs.slice(),
+        aussetzendeIds: [],
+        geberId: geberId
+    };
+}
+
+function aktualisiereEinzelspielerDropdown() {
+    const select = document.getElementById('einzelspieler');
+    if (!select) return;
+
+    const { aktiveDreiIds } = berechneAktiveSpielerinnen();
+
+    select.innerHTML = '<option value="">-- Eingepasst --</option>';
+    aktiveDreiIds.forEach(id => {
+        const spielerin = alleSpielerinnen.find(p => p.id === id);
+        if (spielerin) {
+            select.innerHTML += `<option value="${id}">${spielerin.name}</option>`;
+        }
+    });
+
+    // Standardmäßig auf Eingepasst zurücksetzen
+    select.value = "";
+}
+
 async function speichereSpiel(e) {
     e.preventDefault();
     
-    const spielerID = document.getElementById('einzelspieler').value;
+    const spielerSelect = document.getElementById('einzelspieler');
+    const spielerID = spielerSelect.value;
     const spielartSelect = document.getElementById('spielart');
     const aktuelleSpielart = spielerID === "" ? "Eingepasst" : spielartSelect.value;
     const mitOhneFaktor = parseInt(document.querySelector('input[name="mit_ohne"]:checked').value);
@@ -130,6 +182,20 @@ async function speichereSpiel(e) {
     const schwarzAngesagtCheckbox = document.getElementById('extra-schwarz-angesagt');
     const schwarzAngesagtErgebnis = document.querySelector('input[name="schwarz_angesagt_gewonnen"]:checked');
     const schwarzGewonnenCheckbox = document.getElementById('schwarz-gewonnen-checkbox');
+
+    const { aktiveDreiIds } = berechneAktiveSpielerinnen();
+
+    // Sicherheitsnetz: Einzelspielerin darf nur eine der aktiven Drei sein
+    let einzelspielerIdNum = null;
+    if (spielerID !== "") {
+        const parsed = parseInt(spielerID);
+        if (!aktiveDreiIds.includes(parsed)) {
+            // Ungültige Auswahl -> auf Eingepasst zurücksetzen
+            spielerSelect.value = "";
+        } else {
+            einzelspielerIdNum = parsed;
+        }
+    }
 
     let augenWert;
     let schwarzErreichtWert = 0;
@@ -158,9 +224,9 @@ async function speichereSpiel(e) {
     }
     
     const daten = {
-        aktive_spieler_ids: aktiveIDs.join(','),
+        aktive_spieler_ids: aktiveDreiIds.join(','),
         geber_id: aktiveIDs[geberIndex],
-        einzelspieler_id: spielerID === "" ? null : parseInt(spielerID),
+        einzelspieler_id: spielerSelect.value === "" ? null : (einzelspielerIdNum ?? parseInt(spielerSelect.value)),
         spielart: aktuelleSpielart,
         reizwert: parseInt(document.getElementById('reizwert').value),
         spitzen: spitzenZahl * mitOhneFaktor,
@@ -200,6 +266,7 @@ async function ladeStand() {
         .map(h => `
             <tr>
                 <td>${h.einzelspieler_name}</td>
+                <td>${h.gegnerinnen || ''}</td>
                 <td>${h.spielart}</td>
                 <td>${h.spielwert}</td>
             </tr>
@@ -308,6 +375,7 @@ async function bestaetigeUndSpeichereSpiel() {
         document.getElementById('form-spiel').reset();
         aktuellesSpielDraft = null;
         aktualisiereAnzeige();
+        aktualisiereEinzelspielerDropdown();
         ladeStand();
     } else {
         window.alert('Fehler beim Speichern des Spiels.');
