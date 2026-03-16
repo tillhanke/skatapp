@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skat Zähler</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <header>
+        <h1>Skat Zähler</h1>
+    </header>
+
+    <main>
+        <section id="setup-bereich">
+            <h2>1. Aktive Spielerinnen wählen (3 bis 5)</h2>
+            <div id="spieler-checkboxen">
+                <p>Lade Spielerinnen...</p>
+            </div>
+
+            <div id="spieler-reihenfolge-container">
+                <p class="hinweis">
+                    Lege hier die Sitzreihenfolge der ausgewählten Spielerinnen fest
+                    (oben beginnt, dann im Uhrzeigersinn). Diese Reihenfolge gilt für die
+                    gesamte Partie und kann später nicht mehr geändert werden.
+                </p>
+                <ul id="spieler-reihenfolge">
+                    <!-- Einträge werden dynamisch per JavaScript gefüllt -->
+                </ul>
+            </div>
+
+            <button id="btn-start" disabled>Partie starten</button>
+        </section>
+
+        <section id="spiel-bereich" style="display: none;">
+            <h2>2. Neues Spiel eintragen</h2>
+            <p class="hinweis">Aktuelle Geberin: <strong id="anzeige-geber">-</strong></p>
+            
+            <form id="form-spiel">
+            <label for="einzelspieler">Einzelspielerin (oder Eingepasst):</label>
+            <select id="einzelspieler">
+                </select>
+
+            <div id="spiel-details" >
+                
+                <label for="spielart">Spielart:</label>
+                <select id="spielart" required>
+                    <option value="Eichel">Eichel (Kreuz)</option>
+                    <option value="Blatt">Blatt (Pik)</option>
+                    <option value="Herz">Herz</option>
+                    <option value="Schell">Schell (Karo)</option>
+                    <option value="Grand">Grand</option>
+                    <option value="Null">Null</option>
+                </select>
+
+                <div id="spitzen-container">
+                    <label>Spitzen (Mit/Ohne):</label>
+                    <div style="display: flex; gap: 15px; margin-bottom: 5px;">
+                        <label><input type="radio" name="mit_ohne" value="1" checked> Mit</label>
+                        <label><input type="radio" name="mit_ohne" value="-1"> Ohne</label>
+                    </div>
+                    <select id="spitzen">
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4">4</option>
+                        <option value="5">5</option>
+                        <option value="6">6</option>
+                        <option value="7">7</option>
+                        <option value="8">8</option>
+                        <option value="9">9</option>
+                        <option value="10">10</option>
+                        <option value="11">11</option>
+                    </select>
+                </div>
+
+                <label for="reizwert" style="margin-top: 10px; display: block;">Reizwert:</label>
+                <select id="reizwert" required></select>
+
+                <fieldset style="margin-top: 10px;">
+                    <legend>Extras (Ansagen & Bedingungen)</legend>
+                    <label><input type="checkbox" id="extra-hand"> Hand</label>
+                    <label><input type="checkbox" id="extra-ouvert"> Ouvert</label>
+                    <div style="width: 100%; height: 5px;"></div>
+                    <label><input type="checkbox" id="extra-schneider-angesagt"> Schneider angesagt</label>
+                    <label><input type="checkbox" id="extra-schwarz-angesagt"> Schwarz angesagt</label>
+                </fieldset>
+
+                <div id="augen-container" style="margin-top: 10px;">
+                    <label for="augen">Eingeholte Augen (0 - 120):</label>
+                    <input type="number" id="augen" min="0" max="120" placeholder="z.B. 61">
+                </div>
+
+                <div id="schwarz-checkbox-container" style="display: none; margin-top: 10px;">
+                    <label><input type="checkbox" id="schwarz-gewonnen-checkbox"> Schwarz gewonnen</label>
+                </div>
+
+                <div id="schwarz-ergebnis-container" style="display: none; margin-top: 10px; padding: 10px; background: #dfe6e9; border-radius: 4px;">
+                    <label>Ergebnis des Schwarz-angesagten Spiels:</label>
+                    <div style="display: flex; gap: 15px; margin-top: 5px;">
+                        <label><input type="radio" name="schwarz_angesagt_gewonnen" value="ja" checked> Gewonnen</label>
+                        <label><input type="radio" name="schwarz_angesagt_gewonnen" value="nein"> Verloren</label>
+                    </div>
+                </div>
+
+                <div id="null-ergebnis-container" style="display: none; margin-top: 10px; padding: 10px; background: #ffeaa7; border-radius: 4px;">
+                    <label>Ergebnis des Nullspiels:</label>
+                    <div style="display: flex; gap: 15px; margin-top: 5px;">
+                        <label><input type="radio" name="null_gewonnen" value="ja" checked> Gewonnen</label>
+                        <label><input type="radio" name="null_gewonnen" value="nein"> Verloren</label>
+                    </div>
+                </div>
+
+            </div>
+
+            <button type="submit">Spiel speichern</button>
+        </form>
+        </section>
+
+        <section id="dashboard-bereich" style="display: none;">
+            <h2>Aktueller Stand</h2>
+            <table id="tabelle-stand">
+                <thead>
+                    <tr>
+                        <th>Spielerin</th>
+                        <th>Gesamtpunkte</th>
+                        <th>Gespielte Spiele</th>
+                        <th>Gesamtspiele</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    </tbody>
+            </table>
+
+            <h2>Letzte Spiele</h2>
+            <table id="tabelle-historie">
+                <thead>
+                    <tr>
+                        <th>Spieler</th>
+                        <th>Spielart</th>
+                        <th>Punkte</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    </tbody>
+            </table>
+        </section>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+</html>
