@@ -46,7 +46,9 @@
                 </select>
 
             <div id="spiel-details" >
-                
+                <label for="reizwert" style="margin-top: 10px; display: block;">Reizwert:</label>
+                <select id="reizwert" required></select>
+
                 <label for="spielart">Spielart:</label>
                 <select id="spielart" required>
                     <option value="Eichel">Eichel (Kreuz)</option>
@@ -56,8 +58,7 @@
                     <option value="Grand">Grand</option>
                     <option value="Null">Null</option>
                 </select>
-
-                <div id="spitzen-container">
+                                <div id="spitzen-container">
                     <label>Spitzen (Mit/Ohne):</label>
                     <div style="display: flex; gap: 15px; margin-bottom: 5px;">
                         <label><input type="radio" name="mit_ohne" value="1" checked> Mit</label>
@@ -78,9 +79,7 @@
                     </select>
                 </div>
 
-                <label for="reizwert" style="margin-top: 10px; display: block;">Reizwert:</label>
-                <select id="reizwert" required></select>
-
+                
                 <fieldset style="margin-top: 10px;">
                     <legend>Extras (Ansagen & Bedingungen)</legend>
                     <label><input type="checkbox" id="extra-hand"> Hand</label>
@@ -141,6 +140,37 @@
                     <tr>
                         <th>Spielerin</th>
                         <th>Gesamtpunkte</th>
+                        <th>Seeger-Fabian</th>
+                        <th>Gespielte Spiele</th>
+                        <th>Gesamtspiele</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    </tbody>
+            </table>
+
+            <h2 class="stand-zusatz-titel">Stand dieses Monats</h2>
+            <table id="tabelle-stand-monat">
+                <thead>
+                    <tr>
+                        <th>Spielerin</th>
+                        <th>Gesamtpunkte</th>
+                        <th>Seeger-Fabian</th>
+                        <th>Gespielte Spiele</th>
+                        <th>Gesamtspiele</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    </tbody>
+            </table>
+
+            <h2 class="stand-zusatz-titel">Stand dieser Woche</h2>
+            <table id="tabelle-stand-woche">
+                <thead>
+                    <tr>
+                        <th>Spielerin</th>
+                        <th>Gesamtpunkte</th>
+                        <th>Seeger-Fabian</th>
                         <th>Gespielte Spiele</th>
                         <th>Gesamtspiele</th>
                     </tr>

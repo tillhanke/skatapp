@@ -182,6 +182,10 @@ th {
     margin: 0;
 }
 
+#dashboard-bereich .stand-zusatz-titel {
+    margin-top: 1.75em;
+}
+
 .btn-icon-refresh {
     margin-top: 0;
     padding: 8px;

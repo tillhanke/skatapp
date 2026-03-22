@@ -265,22 +265,31 @@ async function speichereSpiel(e) {
     zeigeSpielVorschau(daten);
 }
 
-async function ladeStand() {
-    const res = await fetch('/api/stand');
-    const daten = await res.json();
-    
-    // Tabelle Punktestand
-    const tbodyStand = document.querySelector('#tabelle-stand tbody');
-    tbodyStand.innerHTML = daten.punktestand
+function fuelleStandTabelle(tbody, punktestand) {
+    if (!tbody) {
+        return;
+    }
+    const liste = punktestand || [];
+    tbody.innerHTML = liste
         .map(s => `
             <tr>
                 <td>${s.name}</td>
                 <td>${s.gesamtpunkte}</td>
+                <td>${s.seeger_fabian ?? ''}</td>
                 <td>${s.gespielte_spiele}</td>
                 <td>${s.gesamtspiele}</td>
             </tr>
         `)
         .join('');
+}
+
+async function ladeStand() {
+    const res = await fetch('/api/stand');
+    const daten = await res.json();
+
+    fuelleStandTabelle(document.querySelector('#tabelle-stand tbody'), daten.punktestand);
+    fuelleStandTabelle(document.querySelector('#tabelle-stand-monat tbody'), daten.punktestand_monat);
+    fuelleStandTabelle(document.querySelector('#tabelle-stand-woche tbody'), daten.punktestand_woche);
         
     // Tabelle Historie
     const tbodyHist = document.querySelector('#tabelle-historie tbody');
