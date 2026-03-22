@@ -20,6 +20,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Event-Listener für den Start-Button
     document.getElementById('btn-start').addEventListener('click', startePartie);
+
+    const btnDashboardOnly = document.getElementById('btn-dashboard-only');
+    if (btnDashboardOnly) {
+        btnDashboardOnly.addEventListener('click', zeigeNurDashboard);
+    }
+
+    const btnRefreshStand = document.getElementById('btn-refresh-stand');
+    if (btnRefreshStand) {
+        btnRefreshStand.addEventListener('click', () => ladeStand());
+    }
     
     // Event-Listener für das Formular
     document.getElementById('form-spiel').addEventListener('submit', speichereSpiel);
@@ -50,7 +60,6 @@ async function ladeSpielerinnen() {
         container.appendChild(label);
     });
 
-    // Button aktivieren, wenn 3-5 gewählt sind und Reihenfolgeliste synchronisieren
     container.addEventListener('change', () => {
         const gewaehlt = document.querySelectorAll('.spieler-opt:checked').length;
         document.getElementById('btn-start').disabled = (gewaehlt < 3 || gewaehlt > 5);
@@ -58,20 +67,16 @@ async function ladeSpielerinnen() {
     });
 }
 
-function startePartie() {
+function ermittleAktiveIDsAusStartAuswahl() {
     const gewaehlteCheckboxen = document.querySelectorAll('.spieler-opt:checked');
-    aktiveIDs = Array.from(gewaehlteCheckboxen).map(cb => parseInt(cb.value));
     const gewaehltIDs = Array.from(gewaehlteCheckboxen).map(cb => parseInt(cb.value));
 
-    // Sicherheitsnetz: ohne gültige Auswahl keine Partie starten
     if (gewaehltIDs.length < 3 || gewaehltIDs.length > 5) {
-        return;
+        return null;
     }
 
-    // IDs aus der aktuellen Reihenfolgeliste lesen
     let idsAusListe = ermittleAktiveIDsAusReihenfolge();
 
-    // Falls Liste und Auswahl nicht konsistent sind, Liste aus Auswahl neu aufbauen
     const setListe = new Set(idsAusListe);
     const istKonsistent =
         idsAusListe.length === gewaehltIDs.length &&
@@ -93,17 +98,34 @@ function startePartie() {
         idsAusListe = gewaehltIDs.slice();
     }
 
-    aktiveIDs = idsAusListe;
-    
+    return idsAusListe;
+}
+
+function startePartie() {
+    const ids = ermittleAktiveIDsAusStartAuswahl();
+    if (!ids) {
+        return;
+    }
+
+    aktiveIDs = ids;
+
     // UI umschalten
     document.getElementById('setup-bereich').style.display = 'none';
     document.getElementById('spiel-bereich').style.display = 'block';
     document.getElementById('dashboard-bereich').style.display = 'block';
-    
+
     // Einzelspieler-Dropdown initial für die aktuellen aktiven Spielerinnen füllen
     aktualisiereEinzelspielerDropdown();
 
     aktualisiereAnzeige();
+    ladeStand();
+}
+
+function zeigeNurDashboard() {
+    document.getElementById('setup-bereich').style.display = 'none';
+    document.getElementById('spiel-bereich').style.display = 'none';
+    document.getElementById('dashboard-bereich').style.display = 'block';
+
     ladeStand();
 }
 

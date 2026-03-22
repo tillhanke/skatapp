@@ -60,6 +60,18 @@ fieldset label {
     cursor: pointer;
 }
 
+.start-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    margin-top: 10px;
+}
+
+.start-actions button {
+    margin-top: 0;
+}
+
 button {
     background-color: #2c3e50;
     color: white;
@@ -156,4 +168,25 @@ th {
 
 #spiel-preview-actions button {
     flex: 1 1 120px;
+}
+
+.dashboard-stand-heading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 0.5em;
+}
+
+.dashboard-stand-heading h2 {
+    margin: 0;
+}
+
+.btn-icon-refresh {
+    margin-top: 0;
+    padding: 8px;
+    line-height: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
