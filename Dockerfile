@@ -12,6 +12,8 @@ COPY app.py /app/
 COPY index.html /app/
 COPY script.js /app/
 COPY style.css /app/
+COPY suche.html /app/
+COPY suche.jl /app/
 
 # Python dependencies
 RUN pip install --no-cache-dir flask gunicorn
