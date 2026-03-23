@@ -194,3 +194,57 @@ th {
     align-items: center;
     justify-content: center;
 }
+
+.suche-header {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+}
+
+.suche-header h2 {
+    margin: 0;
+}
+
+.suche-form {
+    margin-top: 12px;
+}
+
+.suche-grid {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.suche-actions {
+    margin-top: 8px;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.suche-actions button {
+    margin-top: 0;
+}
+
+.suche-ergebnis-kopf {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.suche-ergebnis-kopf h2 {
+    margin: 0;
+}
+
+#suche-treffertext {
+    margin: 0;
+}
+
+#suche-leer {
+    margin-top: 12px;
+    color: #555;
+}

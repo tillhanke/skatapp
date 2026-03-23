@@ -138,6 +138,18 @@ def hole_letztes_spiel():
     return zeile
 
 
+def _parse_bool_query_param(value):
+    """Parst Query-Parameter zu bool (1/0, true/false, ja/nein)."""
+    if value is None:
+        return None
+    normalisiert = str(value).strip().lower()
+    if normalisiert in ("1", "true", "ja", "yes"):
+        return True
+    if normalisiert in ("0", "false", "nein", "no"):
+        return False
+    return None
+
+
 def berechne_spielwert(
     spielart,
     reizwert,
@@ -213,6 +225,13 @@ def berechne_spielwert(
 def index():
     """Liefert die Startseite des Frontends aus."""
     return app.send_static_file('index.html')
+
+
+@app.route('/suche')
+def suche_seite():
+    """Liefert die Suchseite des Frontends aus."""
+    return app.send_static_file('suche.html')
+
 
 @app.route('/api/spieler', methods=['GET'])
 def hole_spieler():
@@ -317,6 +336,104 @@ def undo_letztes_spiel():
             "geber_id": geber_id,
         }
     ), 200
+
+
+@app.route('/api/spiele/suche', methods=['GET'])
+def suche_spiele():
+    """Sucht Spiele anhand optionaler Filter und sortiert neueste zuerst."""
+    verbindung = hole_verbindung()
+    cursor = verbindung.cursor()
+
+    where_parts = []
+    params = []
+
+    einzelspieler_id = request.args.get('einzelspieler_id', type=int)
+    if einzelspieler_id is not None:
+        where_parts.append("sp.einzelspieler_id = ?")
+        params.append(einzelspieler_id)
+
+    ergebnis = request.args.get('ergebnis')
+    if ergebnis == "gewonnen":
+        where_parts.append("sp.spielwert > 0")
+    elif ergebnis == "verloren":
+        where_parts.append("sp.spielwert < 0")
+
+    spielart = request.args.get('spielart')
+    if spielart:
+        where_parts.append("sp.spielart = ?")
+        params.append(spielart)
+
+    schneider_angesagt = _parse_bool_query_param(request.args.get('schneider_angesagt'))
+    if schneider_angesagt is True:
+        where_parts.append("sp.schneider_angesagt = 1")
+    elif schneider_angesagt is False:
+        where_parts.append("sp.schneider_angesagt = 0")
+
+    schwarz_angesagt = _parse_bool_query_param(request.args.get('schwarz_angesagt'))
+    if schwarz_angesagt is True:
+        where_parts.append("sp.schwarz_angesagt = 1")
+    elif schwarz_angesagt is False:
+        where_parts.append("sp.schwarz_angesagt = 0")
+
+    schwarz_erreicht = _parse_bool_query_param(request.args.get('schwarz_erreicht'))
+    if schwarz_erreicht is True:
+        where_parts.append("sp.schwarz_erreicht = 1")
+    elif schwarz_erreicht is False:
+        where_parts.append("sp.schwarz_erreicht = 0")
+
+    schneider_erreicht = _parse_bool_query_param(request.args.get('schneider_erreicht'))
+    schneider_expr = (
+        "(sp.spielart NOT IN ('Null', 'Eingepasst') AND (sp.augen >= 90 OR sp.augen <= 30))"
+    )
+    if schneider_erreicht is True:
+        where_parts.append(schneider_expr)
+    elif schneider_erreicht is False:
+        where_parts.append(f"NOT {schneider_expr}")
+
+    datum_von = request.args.get('datum_von')
+    if datum_von:
+        where_parts.append("date(sp.zeitstempel) >= date(?)")
+        params.append(datum_von)
+
+    datum_bis = request.args.get('datum_bis')
+    if datum_bis:
+        where_parts.append("date(sp.zeitstempel) <= date(?)")
+        params.append(datum_bis)
+
+    sql = """
+        SELECT
+            sp.id,
+            sp.zeitstempel,
+            sp.spielart,
+            sp.reizwert,
+            sp.spielwert,
+            sp.augen,
+            sp.einzelspieler_id,
+            sp.schneider_angesagt,
+            sp.schwarz_angesagt,
+            sp.schwarz_erreicht,
+            COALESCE(spi.name, 'Eingepasst') AS einzelspieler_name,
+            CASE WHEN sp.spielwert > 0 THEN 1 ELSE 0 END AS gewonnen,
+            CASE
+                WHEN sp.spielart NOT IN ('Null', 'Eingepasst')
+                     AND (sp.augen >= 90 OR sp.augen <= 30)
+                THEN 1
+                ELSE 0
+            END AS schneider_erreicht
+        FROM spiel sp
+        LEFT JOIN spieler spi ON sp.einzelspieler_id = spi.id
+    """
+
+    if where_parts:
+        sql += " WHERE " + " AND ".join(where_parts)
+
+    sql += " ORDER BY sp.zeitstempel DESC, sp.id DESC"
+
+    cursor.execute(sql, params)
+    spiele = [dict(row) for row in cursor.fetchall()]
+    verbindung.close()
+    return jsonify(spiele)
+
 
 @app.route('/api/stand', methods=['GET'])
 def hole_punktestand():

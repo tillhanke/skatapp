@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skat Zähler - Suche</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <h1>Skat Zähler</h1>
+    </header>
+
+    <main>
+        <section>
+            <div class="suche-header">
+                <h2>Spiele suchen</h2>
+                <button type="button" id="btn-zurueck-start">Zurück zur Startseite</button>
+            </div>
+
+            <form id="form-suche" class="suche-form">
+                <div class="suche-grid">
+                    <div>
+                        <label for="filter-spielerin">Spielerin</label>
+                        <select id="filter-spielerin">
+                            <option value="">Alle</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label for="filter-ergebnis">Gewonnen / Verloren</label>
+                        <select id="filter-ergebnis">
+                            <option value="">Alle</option>
+                            <option value="gewonnen">Gewonnen</option>
+                            <option value="verloren">Verloren</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label for="filter-spielart">Spielart</label>
+                        <select id="filter-spielart">
+                            <option value="">Alle</option>
+                            <option value="Eingepasst">Eingepasst</option>
+                            <option value="Eichel">Eichel</option>
+                            <option value="Blatt">Blatt</option>
+                            <option value="Herz">Herz</option>
+                            <option value="Schell">Schell</option>
+                            <option value="Grand">Grand</option>
+                            <option value="Null">Null</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label for="filter-schneider-angesagt">Schneider angesagt</label>
+                        <select id="filter-schneider-angesagt">
+                            <option value="">Alle</option>
+                            <option value="1">Ja</option>
+                            <option value="0">Nein</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label for="filter-schneider-erreicht">Schneider erreicht</label>
+                        <select id="filter-schneider-erreicht">
+                            <option value="">Alle</option>
+                            <option value="1">Ja</option>
+                            <option value="0">Nein</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label for="filter-schwarz-angesagt">Schwarz angesagt</label>
+                        <select id="filter-schwarz-angesagt">
+                            <option value="">Alle</option>
+                            <option value="1">Ja</option>
+                            <option value="0">Nein</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label for="filter-schwarz-erreicht">Schwarz erreicht</label>
+                        <select id="filter-schwarz-erreicht">
+                            <option value="">Alle</option>
+                            <option value="1">Ja</option>
+                            <option value="0">Nein</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label for="filter-datum-von">Datum von</label>
+                        <input type="date" id="filter-datum-von">
+                    </div>
+
+                    <div>
+                        <label for="filter-datum-bis">Datum bis</label>
+                        <input type="date" id="filter-datum-bis">
+                    </div>
+                </div>
+
+                <div class="suche-actions">
+                    <button type="submit">Filtern</button>
+                    <button type="button" id="btn-filter-reset">Filter zurücksetzen</button>
+                </div>
+            </form>
+        </section>
+
+        <section>
+            <div class="suche-ergebnis-kopf">
+                <h2>Gefundene Spiele</h2>
+                <p id="suche-treffertext" class="hinweis">Lade Spiele...</p>
+            </div>
+
+            <table id="tabelle-suche">
+                <thead>
+                    <tr>
+                        <th>Datum</th>
+                        <th>Spielerin</th>
+                        <th>Spielart</th>
+                        <th>Punkte</th>
+                        <th>Ergebnis</th>
+                        <th>Schneider</th>
+                        <th>Schwarz</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+
+            <p id="suche-leer" style="display: none;">Keine Spiele für die aktuellen Filter gefunden.</p>
+        </section>
+    </main>
+
+    <script src="suche.js"></script>
+</body>
+</html>

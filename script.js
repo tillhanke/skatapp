@@ -26,6 +26,13 @@ document.addEventListener('DOMContentLoaded', () => {
         btnDashboardOnly.addEventListener('click', zeigeNurDashboard);
     }
 
+    const btnSuche = document.getElementById('btn-suche');
+    if (btnSuche) {
+        btnSuche.addEventListener('click', () => {
+            window.location.href = '/suche';
+        });
+    }
+
     const btnRefreshStand = document.getElementById('btn-refresh-stand');
     if (btnRefreshStand) {
         btnRefreshStand.addEventListener('click', () => ladeStand());
