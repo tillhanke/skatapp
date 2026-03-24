@@ -88,6 +88,30 @@ function formatiereZeitstempel(zeitstempel) {
     return zeit.toLocaleString('de-DE');
 }
 
+function berechneMitspielerinnenText(spiel) {
+    const aktiveStr = spiel && spiel.aktive_spieler_ids ? String(spiel.aktive_spieler_ids) : '';
+    const aktiveIds = aktiveStr
+        .split(',')
+        .map((teil) => parseInt(teil.trim(), 10))
+        .filter((id) => Number.isInteger(id));
+
+    if (aktiveIds.length === 0) {
+        return '-';
+    }
+
+    const einzelId = Number.isInteger(spiel.einzelspieler_id) ? spiel.einzelspieler_id : null;
+    const mitspielerIds = einzelId === null
+        ? aktiveIds
+        : aktiveIds.filter((id) => id !== einzelId);
+
+    const namen = mitspielerIds.map((id) => {
+        const gefunden = sucheSpielerinnen.find((spielerin) => spielerin.id === id);
+        return gefunden ? gefunden.name : `Spielerin ${id}`;
+    });
+
+    return namen.length > 0 ? namen.join(', ') : '-';
+}
+
 function renderSucheTabelle(spiele) {
     const tbody = document.querySelector('#tabelle-suche tbody');
     const leerText = document.getElementById('suche-leer');
@@ -125,6 +149,7 @@ function renderSucheTabelle(spiele) {
             <tr>
                 <td>${formatiereZeitstempel(spiel.zeitstempel)}</td>
                 <td>${spiel.einzelspieler_name || 'Eingepasst'}</td>
+                <td>${berechneMitspielerinnenText(spiel)}</td>
                 <td>${spiel.spielart || '-'}</td>
                 <td>${spiel.spielwert ?? ''}</td>
                 <td>${ergebnisText}</td>

@@ -409,6 +409,7 @@ def suche_spiele():
             sp.spielwert,
             sp.augen,
             sp.einzelspieler_id,
+            sp.aktive_spieler_ids,
             sp.schneider_angesagt,
             sp.schwarz_angesagt,
             sp.schwarz_erreicht,
