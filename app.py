@@ -34,6 +34,12 @@ def _start_of_current_week_monday_local():
     return datetime.combine(montag, datetime.min.time())
 
 
+def _start_of_current_day_local():
+    """Heutiger Kalendertag, 00:00:00 (lokale Serverzeit)."""
+    heute = date.today()
+    return datetime.combine(heute, datetime.min.time())
+
+
 def _ergaenze_seeger_fabian(zeilen):
     """
     Wertung nach Seeger/Fabian:
@@ -491,8 +497,10 @@ def hole_punktestand():
 
     ab_monat = _start_of_current_month_local().strftime("%Y-%m-%d %H:%M:%S")
     ab_woche = _start_of_current_week_monday_local().strftime("%Y-%m-%d %H:%M:%S")
+    ab_tag = _start_of_current_day_local().strftime("%Y-%m-%d %H:%M:%S")
     punktestand_monat = hole_punktestand_mit_zeitfilter(cursor, ab_monat)
     punktestand_woche = hole_punktestand_mit_zeitfilter(cursor, ab_woche)
+    punktestand_tag = hole_punktestand_mit_zeitfilter(cursor, ab_tag)
 
     # Mapping Spieler-ID -> Name für spätere Anzeige (z.B. Gegenspielerinnen)
     spieler_id_zu_name = {eintrag["id"]: eintrag["name"] for eintrag in punktestand}
@@ -546,6 +554,7 @@ def hole_punktestand():
         "punktestand": punktestand,
         "punktestand_monat": punktestand_monat,
         "punktestand_woche": punktestand_woche,
+        "punktestand_tag": punktestand_tag,
         "historie": historie,
         "undo_moeglich": undo_moeglich,
     })

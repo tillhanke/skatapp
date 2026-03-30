@@ -4,6 +4,8 @@ let aktiveIDs = [];
 let geberIndex = 0; // Wer in der Liste der Aktiven gibt gerade
 let gezogenesReihenfolgeElement = null; // Für Drag & Drop der Sitzreihenfolge
 let aktuellesSpielDraft = null; // Zwischenspeicher für die Bestätigungs-Übersicht
+/** Letzte /api/stand-Antwort für die Zeitraum-Punkttabelle (Monat/Woche/Tag/Gesamt). */
+let standZeitraumCache = null;
 
 // --- Initialisierung ---
 document.addEventListener('DOMContentLoaded', () => {
@@ -36,6 +38,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnRefreshStand = document.getElementById('btn-refresh-stand');
     if (btnRefreshStand) {
         btnRefreshStand.addEventListener('click', () => ladeStand());
+    }
+
+    const standZeitraumSelect = document.getElementById('stand-zeitraum-select');
+    if (standZeitraumSelect) {
+        standZeitraumSelect.addEventListener('change', () => aktualisiereStandZeitraumTabelle());
     }
     
     // Event-Listener für das Formular
@@ -290,13 +297,28 @@ function fuelleStandTabelle(tbody, punktestand) {
         .join('');
 }
 
+function aktualisiereStandZeitraumTabelle() {
+    const tbody = document.querySelector('#tabelle-stand-zeitraum tbody');
+    if (!tbody || !standZeitraumCache) {
+        return;
+    }
+    const sel = document.getElementById('stand-zeitraum-select');
+    const key = sel ? sel.value : 'gesamt';
+    const map = {
+        gesamt: standZeitraumCache.punktestand,
+        monat: standZeitraumCache.punktestand_monat,
+        woche: standZeitraumCache.punktestand_woche,
+        tag: standZeitraumCache.punktestand_tag,
+    };
+    fuelleStandTabelle(tbody, map[key]);
+}
+
 async function ladeStand() {
     const res = await fetch('/api/stand');
     const daten = await res.json();
 
-    fuelleStandTabelle(document.querySelector('#tabelle-stand tbody'), daten.punktestand);
-    fuelleStandTabelle(document.querySelector('#tabelle-stand-monat tbody'), daten.punktestand_monat);
-    fuelleStandTabelle(document.querySelector('#tabelle-stand-woche tbody'), daten.punktestand_woche);
+    standZeitraumCache = daten;
+    aktualisiereStandZeitraumTabelle();
         
     // Tabelle Historie
     const tbodyHist = document.querySelector('#tabelle-historie tbody');
