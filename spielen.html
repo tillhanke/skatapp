@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/iosTouch-180x180.png">
+    <title>Skat – Remote</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <header class="seiten-kopf">
+        <h1>Skat – Remote</h1>
+        <button type="button" id="btn-zurueck-start">Zurück zur Startseite</button>
+    </header>
+
+    <main>
+        <!-- 1. Beitritt: Code eingeben oder aus dem Einladungslink uebernehmen -->
+        <section id="beitritt-bereich">
+            <h2>Tisch beitreten</h2>
+
+            <div id="beitritt-code-block">
+                <label for="eingabe-code">Raumcode</label>
+                <input type="text" id="eingabe-code" maxlength="6" autocapitalize="characters"
+                       autocomplete="off" spellcheck="false" placeholder="z. B. K7QM3P">
+                <div class="start-actions">
+                    <button type="button" id="btn-code-oeffnen">Tisch öffnen</button>
+                    <button type="button" id="btn-tisch-anlegen">Neuen Tisch anlegen</button>
+                </div>
+            </div>
+
+            <div id="beitritt-namen-block" style="display: none;">
+                <p class="hinweis">
+                    Tisch <strong id="anzeige-beitritt-code">–</strong>.
+                    Wähle aus, wer du bist.
+                </p>
+                <p id="beitritt-rollenhinweis" class="hinweis hinweis-betont" style="display: none;"></p>
+                <div id="beitritt-namen"></div>
+            </div>
+
+            <p id="beitritt-fehler" class="fehler" style="display: none;"></p>
+        </section>
+
+        <!-- 2. Lobby: wer sitzt schon, Sitzordnung, Start -->
+        <section id="lobby-bereich" style="display: none;">
+            <h2>Lobby</h2>
+            <p class="hinweis">
+                Einladungslink weitergeben – wer ihn öffnet, wählt nur noch seinen Namen:
+            </p>
+            <div class="einladung-zeile">
+                <input type="text" id="einladung-link" readonly>
+                <button type="button" id="btn-link-kopieren">Kopieren</button>
+            </div>
+
+            <p class="hinweis">
+                Sitzreihenfolge (oben beginnt, dann im Uhrzeigersinn). Ziehen zum Umsortieren –
+                nach dem Start steht sie fest.
+            </p>
+            <ul id="lobby-reihenfolge"></ul>
+
+            <div class="start-actions">
+                <button type="button" id="btn-partie-starten" disabled>Partie starten</button>
+                <button type="button" id="btn-platz-freigeben" class="knopf-zurueckhaltend">
+                    Platz freigeben
+                </button>
+            </div>
+            <p id="lobby-hinweis" class="hinweis"></p>
+        </section>
+
+        <!-- 3. Der Tisch -->
+        <section id="tisch-bereich" style="display: none;">
+            <div id="tisch-kopf">
+                <div id="tisch-spieler"></div>
+                <p id="tisch-zuschauer" class="hinweis" style="display: none;"></p>
+                <p id="zuschauer-eigener-status" class="hinweis hinweis-betont" style="display: none;"></p>
+                <p id="tisch-status" class="hinweis"></p>
+            </div>
+
+            <!-- Reizen -->
+            <div id="reiz-bereich" class="aktionsbox" style="display: none;">
+                <h3>Reizen</h3>
+                <p id="reiz-lage" class="hinweis"></p>
+                <div id="reiz-knoepfe" class="knopfreihe"></div>
+                <div id="reiz-verlauf" class="verlauf"></div>
+            </div>
+
+            <!-- Skat aufnehmen oder Hand spielen -->
+            <div id="skat-bereich" class="aktionsbox" style="display: none;">
+                <h3>Skat</h3>
+                <p class="hinweis">Du hast das Spiel mit <strong id="anzeige-reizwert">–</strong>.</p>
+                <div class="knopfreihe">
+                    <button type="button" id="btn-skat-aufnehmen">Skat aufnehmen</button>
+                    <button type="button" id="btn-hand-spielen">Hand spielen</button>
+                </div>
+            </div>
+
+            <!-- Druecken -->
+            <div id="druecken-bereich" class="aktionsbox" style="display: none;">
+                <h3>Drücken</h3>
+                <p class="hinweis">
+                    Skat: <span id="anzeige-skat" class="kartenzeile"></span><br>
+                    Wähle unten genau zwei Karten zum Drücken.
+                </p>
+                <div class="knopfreihe">
+                    <button type="button" id="btn-druecken" disabled>Zwei Karten drücken</button>
+                </div>
+            </div>
+
+            <!-- Ansage -->
+            <div id="ansage-bereich" class="aktionsbox" style="display: none;">
+                <h3>Ansage</h3>
+                <label for="ansage-spielart">Spielart</label>
+                <select id="ansage-spielart">
+                    <option value="Eichel">Eichel</option>
+                    <option value="Blatt">Blatt</option>
+                    <option value="Herz">Herz</option>
+                    <option value="Schell">Schell</option>
+                    <option value="Grand">Grand</option>
+                    <option value="Null">Null</option>
+                </select>
+
+                <fieldset id="ansage-extras">
+                    <legend>Ansagen</legend>
+                    <label><input type="checkbox" id="ansage-schneider"> Schneider angesagt</label>
+                    <label><input type="checkbox" id="ansage-schwarz"> Schwarz angesagt</label>
+                    <label><input type="checkbox" id="ansage-ouvert"> Ouvert</label>
+                </fieldset>
+                <p id="ansage-hinweis" class="hinweis"></p>
+
+                <div class="knopfreihe">
+                    <button type="button" id="btn-ansagen">Spiel ansagen</button>
+                </div>
+            </div>
+
+            <!-- Stich -->
+            <div id="stich-bereich">
+                <h3>Stich</h3>
+                <div id="stich-karten" class="stichflaeche"></div>
+                <p id="stich-info" class="hinweis"></p>
+            </div>
+
+            <!-- Eigenes Blatt -->
+            <div id="blatt-bereich">
+                <h3 id="blatt-ueberschrift">Dein Blatt</h3>
+                <div id="blatt-karten" class="kartenhand"></div>
+            </div>
+
+            <!-- Zuschauermodus -->
+            <div id="zuschauer-bereich" class="aktionsbox" style="display: none;">
+                <h3>Du setzt aus</h3>
+                <label class="schalter">
+                    <input type="checkbox" id="schalter-aufdecken">
+                    Karten aufdecken (alle Blätter, Skat und Stiche)
+                </label>
+                <div id="zuschauer-inhalt"></div>
+            </div>
+
+            <!-- Ergebnis -->
+            <div id="ergebnis-bereich" class="aktionsbox" style="display: none;">
+                <h3>Spiel beendet</h3>
+                <div id="ergebnis-inhalt"></div>
+                <div class="knopfreihe">
+                    <button type="button" id="btn-naechstes-spiel">Nächstes Spiel geben</button>
+                    <button type="button" id="btn-spiel-zuruecknehmen" class="knopf-zurueckhaltend">
+                        Spiel zurücknehmen
+                    </button>
+                    <button type="button" id="btn-tisch-verlassen" class="knopf-zurueckhaltend">
+                        Tisch verlassen
+                    </button>
+                </div>
+                <p class="hinweis">
+                    Zurücknehmen geht nur jetzt, bevor neu gegeben wird – und einmal pro Spiel.
+                </p>
+            </div>
+
+            <h3>Bisherige Spiele dieser Runde</h3>
+            <table id="tabelle-runde">
+                <thead>
+                    <tr>
+                        <th>Alleinspielerin</th>
+                        <th>Spielart</th>
+                        <th>Augen</th>
+                        <th>Punkte</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </section>
+
+        <p id="verbindung-status" class="hinweis"></p>
+    </main>
+
+    <script src="spielen.js"></script>
+</body>
+</html>

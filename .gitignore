@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# SQLite-Datenbanken inkl. WAL-Begleitdateien
+data/
+*.db
+*.db-wal
+*.db-shm

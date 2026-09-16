@@ -18,6 +18,32 @@ header {
     margin-bottom: 20px;
 }
 
+/* Auf jeder Seite an derselben Stelle: Titel links, Rückweg rechts. */
+.seiten-kopf {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.seiten-kopf h1 {
+    margin: 0;
+}
+
+.seiten-kopf button {
+    background: transparent;
+    color: #2c3e50;
+    border: 1px solid #b2bec3;
+    padding: 6px 12px;
+    font-size: 14px;
+}
+
+.seiten-kopf button:hover {
+    background: #2c3e50;
+    color: white;
+}
+
 section {
     background: white;
     padding: 20px;
@@ -266,4 +292,325 @@ th {
 #suche-leer {
     margin-top: 12px;
     color: #555;
+}
+
+/* --- Remote-Play ------------------------------------------------------- */
+
+.fehler {
+    color: #c0392b;
+    font-weight: bold;
+}
+
+.knopfreihe {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin: 10px 0;
+}
+
+.knopf-zurueckhaltend {
+    background: #7f8c8d;
+}
+
+.aktionsbox {
+    border: 1px solid #dfe6e9;
+    border-radius: 6px;
+    padding: 12px;
+    margin: 15px 0;
+    background: #fbfcfd;
+}
+
+.aktionsbox h3 {
+    margin-top: 0;
+}
+
+#eingabe-code {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 24px;
+    letter-spacing: 4px;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+.einladung-zeile {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 15px;
+}
+
+.einladung-zeile input {
+    flex: 1;
+    min-width: 0;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+#lobby-reihenfolge {
+    list-style: decimal inside;
+    padding: 0;
+    margin: 10px 0;
+}
+
+#lobby-reihenfolge li {
+    background: #ecf0f1;
+    border-radius: 4px;
+    padding: 10px;
+    margin-bottom: 6px;
+    cursor: grab;
+}
+
+#lobby-reihenfolge li.wird-gezogen {
+    opacity: 0.4;
+}
+
+/* Spielerleiste */
+#tisch-spieler {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+
+.spieler-chip {
+    border: 1px solid #dfe6e9;
+    border-radius: 6px;
+    padding: 6px 10px;
+    background: white;
+    display: flex;
+    flex-direction: column;
+    line-height: 1.3;
+    font-size: 14px;
+}
+
+.spieler-chip.ist-am-zug {
+    border-color: #27ae60;
+    box-shadow: 0 0 0 2px rgba(39, 174, 96, 0.25);
+}
+
+.spieler-chip.setzt-aus {
+    opacity: 0.6;
+}
+
+.spieler-chip.nicht-verbunden {
+    border-style: dashed;
+    opacity: 0.75;
+    padding-right: 26px;   /* Platz für das Entfernen-Kreuz */
+    position: relative;
+}
+
+/* Bewusst klein und unauffällig: es ist ein Notausgang, keine Hauptaktion. */
+.chip-entfernen {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    margin: 0;
+    line-height: 1;
+    font-size: 15px;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: #b2bec3;
+    cursor: pointer;
+}
+
+.chip-entfernen:hover,
+.chip-entfernen:focus-visible {
+    background: #c0392b;
+    color: white;
+}
+
+.chip-zusatz, .chip-karten {
+    font-size: 12px;
+    color: #7f8c8d;
+}
+
+/* Karten */
+.karte {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 46px;
+    padding: 8px 4px;
+    margin: 0;
+    border: 1px solid #b2bec3;
+    border-radius: 6px;
+    background: white;
+    color: #2c3e50;
+    font-size: 18px;
+    font-weight: bold;
+    line-height: 1.1;
+    cursor: default;
+}
+
+button.karte {
+    cursor: pointer;
+}
+
+button.karte:hover {
+    border-color: #2c3e50;
+    transform: translateY(-3px);
+}
+
+/* Deutsches Blatt, traditionell vierfarbig. Wer es lieber zweifarbig mag,
+   setzt Eichel und Blatt einfach auf dieselbe dunkle Farbe. */
+.karte-eichel { color: #2f2a26; }
+.karte-blatt  { color: #1f7a3d; }
+.karte-herz   { color: #c0392b; }
+.karte-schell { color: #a9730a; }   /* dunkler als reines Gelb: der Rang muss auf Weiß lesbar bleiben */
+
+.farb-symbol {
+    width: 20px;
+    height: 20px;
+    fill: currentColor;
+    display: block;
+}
+
+.karte-gewaehlt {
+    border-color: #27ae60;
+    box-shadow: 0 0 0 2px rgba(39, 174, 96, 0.35);
+    transform: translateY(-5px);
+}
+
+.karte-gedimmt {
+    opacity: 0.35;
+}
+
+.kartenhand {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    padding: 6px 0;
+}
+
+.kartenzeile {
+    display: inline-flex;
+    gap: 4px;
+    vertical-align: middle;
+}
+
+.kartenzeile .karte {
+    min-width: 34px;
+    font-size: 14px;
+    padding: 4px 3px;
+}
+
+.kartenzeile .farb-symbol {
+    width: 15px;
+    height: 15px;
+}
+
+/* Stich */
+.stichflaeche {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    min-height: 80px;
+    align-items: center;
+    padding: 10px;
+    background: #ecf0f1;
+    border-radius: 6px;
+}
+
+.stich-platz {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.stich-name {
+    font-size: 12px;
+    color: #7f8c8d;
+}
+
+.verlauf {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    font-size: 13px;
+    color: #7f8c8d;
+}
+
+.verlauf span::after {
+    content: '·';
+    margin-left: 6px;
+}
+
+.verlauf span:last-child::after {
+    content: '';
+}
+
+/* Zuschauermodus */
+.schalter {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: normal;
+    cursor: pointer;
+}
+
+.zuschauer-block {
+    margin-top: 12px;
+}
+
+.zuschauer-block h4 {
+    margin: 0 0 4px 0;
+    font-size: 14px;
+}
+
+.zuschauer-stich {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.stich-nummer {
+    min-width: 22px;
+    color: #7f8c8d;
+    font-size: 13px;
+}
+
+.ergebnis-punkte {
+    font-size: 26px;
+    font-weight: bold;
+    margin: 6px 0 0 0;
+}
+
+/* Auf dem Handy wird es schnell eng */
+@media (max-width: 480px) {
+    body {
+        padding: 10px;
+    }
+
+    .karte {
+        min-width: 40px;
+        font-size: 16px;
+        padding: 6px 3px;
+    }
+
+    .farb-symbol {
+        width: 17px;
+        height: 17px;
+    }
+
+    .kartenhand {
+        gap: 4px;
+    }
+}
+
+.hinweis-betont {
+    border-left: 3px solid #2c3e50;
+    padding-left: 10px;
+    font-weight: 600;
+    color: #2c3e50;
 }

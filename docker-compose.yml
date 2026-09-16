@@ -6,6 +6,9 @@ services:
       # App listens on port 5000
       - "5002:5000"
     volumes:
-      # Persist the SQLite DB file on the host
-      - ./skat_daten.db:/app/skat_daten.db
+      # Ein VERZEICHNIS mounten, nicht die einzelne DB-Datei:
+      # Im WAL-Modus legt SQLite zusätzlich "-wal" und "-shm" daneben an.
+      - ./data:/app/data
+    environment:
+      SKAT_DB: /app/data/skat_daten.db
     restart: unless-stopped

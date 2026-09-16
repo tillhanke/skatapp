@@ -1,1 +1,6 @@
 Flask>=3.0,<4
+gunicorn>=21.2
+gevent>=24.2
+
+# Entwicklung / Tests
+pytest>=8.0

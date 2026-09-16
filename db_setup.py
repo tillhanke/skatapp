@@ -1,21 +1,36 @@
 #!.venv/bin/python
+import os
 import sqlite3
 import argparse
 
 # --- Konfiguration ---
-DB_DATEI = "skat_daten.db"
+DB_DATEI = os.environ.get("SKAT_DB", "skat_daten.db")
 
 # --- Datenbank-Funktionen ---
 
 def hole_verbindung():
     """Stellt die Verbindung zur lokalen SQLite-Datenbank her."""
-    return sqlite3.connect(DB_DATEI)
+    ordner = os.path.dirname(os.path.abspath(DB_DATEI))
+    os.makedirs(ordner, exist_ok=True)
+    verbindung = sqlite3.connect(DB_DATEI)
+    verbindung.execute("PRAGMA journal_mode=WAL")
+    return verbindung
 
 
 def setze_db_datei(pfad):
     """Setzt die zu verwendende Datenbankdatei global."""
     global DB_DATEI
     DB_DATEI = pfad
+
+def _spalte_ergaenzen(cursor, tabelle, spalte, definition):
+    """Fügt eine Spalte hinzu, falls sie noch fehlt (idempotente Migration)."""
+    vorhanden = {zeile[1] for zeile in cursor.execute(f"PRAGMA table_info({tabelle})")}
+    if spalte in vorhanden:
+        return False
+    cursor.execute(f"ALTER TABLE {tabelle} ADD COLUMN {spalte} {definition}")
+    print(f"Migration: Spalte {tabelle}.{spalte} ergänzt.")
+    return True
+
 
 def datenbank_initialisieren():
     """Erstellt die Tabellen, falls sie noch nicht existieren."""
@@ -61,16 +76,32 @@ def datenbank_initialisieren():
         )
     ''')
 
-    # Schema-Migration für bestehende Datenbanken:
-    # Versuche, die Spalte "schwarz_erreicht" nachträglich hinzuzufügen,
-    # falls sie noch nicht existiert.
-    try:
-        cursor.execute(
-            'ALTER TABLE spiel ADD COLUMN schwarz_erreicht INTEGER DEFAULT 0'
+    # Tisch für das Remote-Play: hält den kompletten Zustand einer laufenden
+    # Runde als JSON-Snapshot, damit ein Serverneustart keine Partie zerstört
+    # und Spielerinnen jederzeit wieder einsteigen können.
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS tisch (
+            code TEXT PRIMARY KEY,           -- Raumcode aus dem Einladungslink
+            erstellt DATETIME DEFAULT CURRENT_TIMESTAMP,
+            zuletzt_aktiv DATETIME DEFAULT CURRENT_TIMESTAMP,
+            version INTEGER NOT NULL DEFAULT 0,
+            geschlossen INTEGER NOT NULL DEFAULT 0,
+            zustand TEXT NOT NULL            -- JSON-Snapshot des Tisches
         )
-    except sqlite3.OperationalError:
-        # Spalte existiert bereits oder ALTER TABLE ist nicht nötig.
-        pass
+    """)
+
+    # Schema-Migrationen für bestehende Datenbanken.
+    _spalte_ergaenzen(cursor, "spiel", "schwarz_erreicht", "INTEGER DEFAULT 0")
+    # Woher stammt ein Spiel: von Hand eingetragen oder remote gespielt?
+    _spalte_ergaenzen(cursor, "spiel", "quelle", "TEXT DEFAULT 'manuell'")
+    # Zu welcher Runde gehört das Spiel? Nötig, damit "letztes Spiel
+    # zurücknehmen" nur die eigene Runde trifft und nicht die Partie, die
+    # gerade an einem anderen Tisch läuft. Format: 'lokal:<uuid>' bzw.
+    # 'tisch:<RAUMCODE>'. Altbestand bleibt NULL und ist nicht zurücknehmbar.
+    _spalte_ergaenzen(cursor, "spiel", "sitzung_id", "TEXT")
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_spiel_sitzung ON spiel (sitzung_id, id)"
+    )
 
     verbindung.commit()
     verbindung.close()

@@ -1,18 +1,31 @@
 #!/home/hanke/src/skatapp/.venv/bin/python
+import json
+import os
 import sqlite3
+import threading
+import time
 from datetime import date, datetime, timedelta
-from flask import Flask, request, jsonify
+from flask import Flask, Response, request, jsonify
+
+import tisch as tisch_modul
+import verlauf as verlauf_modul
+from skat_engine import RegelFehler
 
 # --- Konfiguration ---
-DB_DATEI = "skat_daten.db"
+# Pfad zur Datenbank; im Container via Umgebungsvariable auf ein gemountetes
+# Verzeichnis gesetzt (WAL legt "-wal"/"-shm" neben der Datei an).
+DB_DATEI = os.environ.get("SKAT_DB", "skat_daten.db")
 
 # Seeger/Fabian: Multiplikator für „verlorene Spiele der anderen Mitspieler“ (Dreiertisch 40, Vierertisch 30).
 # Diese App verwendet durchgängig Dreier-Runden (genau drei aktive Spielerinnen).
 SEEGER_FABIAN_VERLUST_ANDERE = 40
 
 # --- Undo-Status (in-memory, pro Prozess) ---
-# Merkt sich, für welches Spiel (id) die Undo-Funktion bereits genutzt wurde.
-_last_undo_game_id = None
+# Welche Runden haben ihr Undo bereits verbraucht? Nach einem erfolgreichen
+# Zurücknehmen ist das nächste erst wieder möglich, sobald die Runde ein neues
+# Spiel gespeichert hat - sonst könnte man sich rückwärts durch die Historie
+# löschen.
+_undo_verbraucht: set[str] = set()
 
 # Wir konfigurieren Flask so, dass es statische Dateien (wie index.html) 
 # direkt aus dem aktuellen Ordner ('.') ausliefert.
@@ -121,27 +134,70 @@ def hole_punktestand_mit_zeitfilter(cursor, ab_zeitstempel_str):
 def hole_verbindung():
     """Stellt die Verbindung her und erlaubt Spaltenzugriff per Name."""
     verbindung = sqlite3.connect(DB_DATEI, check_same_thread=False)
+    # WAL erlaubt Lesen waehrend geschrieben wird - noetig, sobald mehrere
+    # Remote-Tische gleichzeitig Spiele speichern.
+    verbindung.execute("PRAGMA journal_mode=WAL")
+    verbindung.execute("PRAGMA busy_timeout=5000")
     # Wichtig: row_factory konvertiert die Zeilen in Dictionary-ähnliche Objekte.
     # Das macht die Umwandlung in JSON für das Frontend später extrem einfach.
     verbindung.row_factory = sqlite3.Row 
     return verbindung
 
 
-def hole_letztes_spiel():
-    """Lädt das zuletzt gespeicherte Spiel (nach id)."""
+def hole_letztes_spiel(sitzung_id):
+    """Lädt das zuletzt gespeicherte Spiel EINER Runde.
+
+    Ohne die Einschränkung auf die Sitzung würde eine Runde das Spiel einer
+    anderen zurücknehmen, sobald zwei Tische gleichzeitig laufen.
+    """
     verbindung = hole_verbindung()
     cursor = verbindung.cursor()
     cursor.execute(
         """
         SELECT id, geber_id
         FROM spiel
+        WHERE sitzung_id = ?
         ORDER BY id DESC
         LIMIT 1
-        """
+        """,
+        (sitzung_id,),
     )
     zeile = cursor.fetchone()
     verbindung.close()
     return zeile
+
+
+def darf_zuruecknehmen(sitzung_id):
+    """Gibt es in dieser Runde ein Spiel, das zurückgenommen werden darf?"""
+    if not sitzung_id or sitzung_id in _undo_verbraucht:
+        return False
+    return hole_letztes_spiel(sitzung_id) is not None
+
+
+def _spiel_zuruecknehmen(sitzung_id):
+    """Entfernt das letzte Spiel einer Runde. Gibt (Antwortdaten, Status) zurück."""
+    if not sitzung_id:
+        return {"error": "Ohne Runden-Kennung kann kein Spiel zurückgenommen werden."}, 400
+
+    if sitzung_id in _undo_verbraucht:
+        return {"error": "Das letzte Spiel wurde bereits zurückgenommen."}, 409
+
+    zeile = hole_letztes_spiel(sitzung_id)
+    if zeile is None:
+        return {"error": "In dieser Runde gibt es kein Spiel, das zurückgenommen werden kann."}, 400
+
+    verbindung = hole_verbindung()
+    verbindung.execute("DELETE FROM spiel WHERE id = ?", (zeile["id"],))
+    verbindung.commit()
+    verbindung.close()
+
+    _undo_verbraucht.add(sitzung_id)
+
+    return {
+        "status": "erfolg",
+        "entfernte_spiel_id": zeile["id"],
+        "geber_id": zeile["geber_id"],
+    }, 200
 
 
 def _parse_bool_query_param(value):
@@ -253,7 +309,6 @@ def hole_spieler():
 
 @app.route('/api/spiel', methods=['POST'])
 def speichere_spiel():
-    global _last_undo_game_id
     daten = request.json
 
     aktive_str = daten.get('aktive_spieler_ids', '')
@@ -277,14 +332,16 @@ def speichere_spiel():
         daten.get('schwarz_erreicht', 0), daten['augen']
     )
     
+    sitzung_id = daten.get('sitzung_id')
+
     sql = '''
         INSERT INTO spiel (
             aktive_spieler_ids, geber_id, einzelspieler_id, 
             spielart, reizwert, spitzen, hand, ouvert, 
             schneider_angesagt, schwarz_angesagt, schwarz_erreicht,
-            augen, spielwert
+            augen, spielwert, sitzung_id
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     '''
     
     werte = (
@@ -293,55 +350,29 @@ def speichere_spiel():
         daten.get('hand', 0), daten.get('ouvert', 0), 
         daten.get('schneider_angesagt', 0), daten.get('schwarz_angesagt', 0),
         daten.get('schwarz_erreicht', 0),
-        daten['augen'], spielwert
+        daten['augen'], spielwert, sitzung_id
     )
     
     cursor.execute(sql, werte)
     verbindung.commit()
     verbindung.close()
 
-    # Nach erfolgreichem Speichern ist Undo für dieses neue Spiel wieder möglich.
-    _last_undo_game_id = None
+    # Nach erfolgreichem Speichern darf diese Runde wieder einmal zurücknehmen.
+    _undo_verbraucht.discard(sitzung_id)
     return jsonify({"status": "erfolg", "spielwert": spielwert}), 201
 
 
 @app.route('/api/spiel/undo', methods=['POST'])
 def undo_letztes_spiel():
+    """Entfernt das zuletzt gespeicherte Spiel DIESER Runde.
+
+    Die Runde wird über ``sitzung_id`` identifiziert; ohne sie würde am
+    falschen Tisch gelöscht. Pro Runde ist das Zurücknehmen einmal möglich
+    und danach erst wieder, nachdem ein neues Spiel gespeichert wurde.
     """
-    Entfernt genau das zuletzt gespeicherte Spiel.
-
-    Die Funktion kann pro Spiel nur einmal genutzt werden:
-    Wurde das aktuelle letzte Spiel bereits zurückgenommen, ist ein weiteres Undo
-    erst nach dem nächsten neu gespeicherten Spiel möglich.
-    """
-    global _last_undo_game_id
-
-    zeile = hole_letztes_spiel()
-    if zeile is None:
-        return jsonify({"error": "Kein Spiel vorhanden, das zurückgenommen werden kann."}), 400
-
-    last_id = zeile["id"]
-    geber_id = zeile["geber_id"]
-
-    # Wurde für dieses Spiel bereits ein Undo ausgeführt?
-    if _last_undo_game_id == last_id:
-        return jsonify({"error": "Das letzte Spiel wurde bereits zurückgenommen."}), 409
-
-    verbindung = hole_verbindung()
-    cursor = verbindung.cursor()
-    cursor.execute("DELETE FROM spiel WHERE id = ?", (last_id,))
-    verbindung.commit()
-    verbindung.close()
-
-    _last_undo_game_id = last_id
-
-    return jsonify(
-        {
-            "status": "erfolg",
-            "entfernte_spiel_id": last_id,
-            "geber_id": geber_id,
-        }
-    ), 200
+    daten = request.get_json(silent=True) or {}
+    antwort, status = _spiel_zuruecknehmen(daten.get('sitzung_id'))
+    return jsonify(antwort), status
 
 
 @app.route('/api/spiele/suche', methods=['GET'])
@@ -445,7 +476,6 @@ def suche_spiele():
 @app.route('/api/stand', methods=['GET'])
 def hole_punktestand():
     """Berechnet den aktuellen Punktestand und lädt die letzten 10 Spiele."""
-    global _last_undo_game_id
     verbindung = hole_verbindung()
     cursor = verbindung.cursor()
     
@@ -541,14 +571,11 @@ def hole_punktestand():
         eintrag["gegnerinnen"] = ", ".join(gegner_namen)
         historie.append(eintrag)
 
-    # Prüfen, ob das Zurücknehmen des letzten Spiels aktuell möglich ist.
-    # Basis: letztes Spiel = höchste id in der Historie.
-    undo_moeglich = False
-    if historie_zeilen:
-        letztes_spiel_id = historie_zeilen[0]["id"]
-        undo_moeglich = (_last_undo_game_id != letztes_spiel_id)
-    
     verbindung.close()
+
+    # Zurücknehmen bezieht sich immer auf die eigene Runde. Ohne Angabe einer
+    # Runde (z. B. reine Dashboard-Ansicht) gibt es nichts zurückzunehmen.
+    undo_moeglich = darf_zuruecknehmen(request.args.get('sitzung_id'))
     
     return jsonify({
         "punktestand": punktestand,
@@ -560,9 +587,439 @@ def hole_punktestand():
     })
 
 
+# ===========================================================================
+#  Remote-Play: Tische, Aktionen, Server-Sent-Events
+# ===========================================================================
+
+# Laufende Tische liegen im Prozessspeicher; jede Aenderung wird zusaetzlich
+# als JSON-Snapshot in die Tabelle "tisch" geschrieben. Deshalb laeuft die App
+# im Container bewusst mit genau EINEM gunicorn-Worker.
+_tische: dict[str, tisch_modul.Tisch] = {}
+_tisch_sperre = threading.RLock()
+
+# Wie oft der SSE-Strom nach Aenderungen schaut bzw. ein Lebenszeichen sendet.
+_SSE_TAKT_SEKUNDEN = 0.4
+_SSE_PING_SEKUNDEN = 15
+
+
+def _tisch_speichern(tisch):
+    verbindung = hole_verbindung()
+    verbindung.execute(
+        """
+        INSERT INTO tisch (code, zustand, version, zuletzt_aktiv)
+        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(code) DO UPDATE SET
+            zustand = excluded.zustand,
+            version = excluded.version,
+            zuletzt_aktiv = CURRENT_TIMESTAMP
+        """,
+        (tisch.code, json.dumps(tisch.als_dict()), tisch.version),
+    )
+    verbindung.commit()
+    verbindung.close()
+
+
+def _tisch_holen(code):
+    """Tisch aus dem Speicher holen oder aus dem Snapshot wiederherstellen."""
+    code = (code or "").strip().upper()
+    if not code:
+        return None
+    with _tisch_sperre:
+        if code in _tische:
+            return _tische[code]
+        verbindung = hole_verbindung()
+        zeile = verbindung.execute(
+            "SELECT zustand FROM tisch WHERE code = ? AND geschlossen = 0", (code,)
+        ).fetchone()
+        verbindung.close()
+        if zeile is None:
+            return None
+        tisch = tisch_modul.Tisch.aus_dict(json.loads(zeile["zustand"]))
+        _tische[code] = tisch
+        return tisch
+
+
+def _token_aus_request(code):
+    """Token aus Body, Header oder Cookie - nie aus der URL, ausser fuer SSE.
+
+    EventSource kann keine Header setzen, deshalb wird beim Beitritt zusaetzlich
+    ein Cookie gesetzt, das der Ereignisstrom mitbenutzt.
+    """
+    daten = request.get_json(silent=True) or {}
+    return (
+        daten.get("token")
+        or request.headers.get("X-Skat-Token")
+        or request.cookies.get(f"skat_token_{code}")
+        or request.args.get("token")
+    )
+
+
+def _tisch_und_token(code):
+    """Fuer alles, was nur Sitzende duerfen (starten, geben, entfernen, ...)."""
+    tisch = _tisch_holen(code)
+    if tisch is None:
+        raise LookupError(f"Kein Tisch mit dem Code {code!r}.")
+    token = _token_aus_request((code or "").strip().upper())
+    if tisch.spieler_nach_token(token) is None:
+        raise PermissionError("Du sitzt nicht an diesem Tisch.")
+    return tisch, token
+
+
+def _tisch_und_teilnehmer(code):
+    """Fuer Zuschauen und Gehen - Sitzende wie Zuschauende.
+
+    Bewusst getrennt von _tisch_und_token: wer nur zuschaut, soll den Tisch
+    sehen und ihn verlassen koennen, aber nicht die Partie steuern.
+    """
+    tisch = _tisch_holen(code)
+    if tisch is None:
+        raise LookupError(f"Kein Tisch mit dem Code {code!r}.")
+    token = _token_aus_request((code or "").strip().upper())
+    eintrag, _ = tisch.teilnehmer_nach_token(token)
+    if eintrag is None:
+        raise PermissionError("Du gehoerst nicht zu diesem Tisch.")
+    return tisch, token
+
+
+@app.errorhandler(RegelFehler)
+def _regelfehler_beantworten(fehler):
+    return jsonify({"error": str(fehler)}), 400
+
+
+@app.errorhandler(LookupError)
+def _nicht_gefunden_beantworten(fehler):
+    return jsonify({"error": str(fehler)}), 404
+
+
+@app.errorhandler(PermissionError)
+def _verboten_beantworten(fehler):
+    return jsonify({"error": str(fehler)}), 403
+
+
+@app.route('/spielen')
+def spielen_seite():
+    """Remote-Play-Oberflaeche. Der Einladungslink hat die Form /spielen?code=ABC123."""
+    return app.send_static_file('spielen.html')
+
+
+@app.route('/api/tisch', methods=['POST'])
+def tisch_anlegen():
+    tisch = tisch_modul.Tisch()
+    with _tisch_sperre:
+        _tische[tisch.code] = tisch
+    _tisch_speichern(tisch)
+    return jsonify({"code": tisch.code}), 201
+
+
+@app.route('/api/tisch/<code>', methods=['GET'])
+def tisch_uebersicht(code):
+    """Oeffentliche Lobby-Info: wer sitzt schon, wer kann noch beitreten.
+
+    Bewusst ohne Token - diese Seite sieht man ueber den Einladungslink,
+    bevor man einen Platz hat. Karten stehen hier nicht drin.
+    """
+    tisch = _tisch_holen(code)
+    if tisch is None:
+        raise LookupError(f"Kein Tisch mit dem Code {code!r}.")
+
+    verbindung = hole_verbindung()
+    alle = [dict(z) for z in verbindung.execute("SELECT id, name FROM spieler ORDER BY name")]
+    verbindung.close()
+
+    belegt = {s["id"] for s in tisch.spieler + tisch.zuschauer}
+    token = _token_aus_request(tisch.code)
+    eigener, zuschauend = tisch.teilnehmer_nach_token(token)
+
+    # Niemand wird abgewiesen - aber wer jetzt kommt, schaut womoeglich erst zu.
+    if tisch.phase == tisch_modul.PHASE_LOBBY and tisch.platz_frei():
+        beitritt_als = "spieler"
+    elif not tisch.platz_frei():
+        beitritt_als = "zuschauer_voll"
+    else:
+        beitritt_als = "zuschauer_partie_laeuft"
+
+    return jsonify({
+        "code": tisch.code,
+        "phase": tisch.phase,
+        "version": tisch.version,
+        "sitzend": [{"id": s["id"], "name": s["name"]} for s in tisch.spieler],
+        "zuschauer": [{"id": z["id"], "name": z["name"]} for z in tisch.zuschauer],
+        "frei": [s for s in alle if s["id"] not in belegt],
+        "voll": not tisch.platz_frei(),
+        "beitritt_als": beitritt_als,
+        "ich": None if eigener is None else {
+            "id": eigener["id"], "name": eigener["name"],
+            "rolle": "zuschauer" if zuschauend else "spieler",
+        },
+    })
+
+
+@app.route('/api/tisch/<code>/beitreten', methods=['POST'])
+def tisch_beitreten(code):
+    tisch = _tisch_holen(code)
+    if tisch is None:
+        raise LookupError(f"Kein Tisch mit dem Code {code!r}.")
+
+    daten = request.get_json(silent=True) or {}
+    spieler_id = daten.get("spieler_id")
+    if spieler_id is None:
+        raise RegelFehler("Es fehlt die Angabe, wer beitreten moechte.")
+
+    verbindung = hole_verbindung()
+    zeile = verbindung.execute(
+        "SELECT id, name FROM spieler WHERE id = ?", (int(spieler_id),)
+    ).fetchone()
+    verbindung.close()
+    if zeile is None:
+        raise RegelFehler("Diese Spielerin steht nicht in der Datenbank.")
+
+    token, rolle = tisch.beitreten(zeile["id"], zeile["name"])
+    _tisch_speichern(tisch)
+
+    antwort = jsonify({
+        "token": token,
+        "spieler_id": zeile["id"],
+        "name": zeile["name"],
+        "rolle": rolle,
+        # Warum nur zuschauen? Danach richtet sich der Hinweis im Browser.
+        "grund": None if rolle == "spieler" else (
+            "voll" if not tisch.platz_frei() else "partie_laeuft"
+        ),
+    })
+    # Cookie, damit der Ereignisstrom (EventSource) sich ausweisen kann.
+    antwort.set_cookie(
+        f"skat_token_{tisch.code}", token,
+        max_age=60 * 60 * 24 * 7, samesite="Lax", httponly=False, path="/",
+    )
+    return antwort, 201
+
+
+@app.route('/api/tisch/<code>/reihenfolge', methods=['POST'])
+def tisch_reihenfolge(code):
+    tisch, _ = _tisch_und_token(code)
+    daten = request.get_json(silent=True) or {}
+    tisch.reihenfolge_setzen([int(i) for i in daten.get("reihenfolge", [])])
+    _tisch_speichern(tisch)
+    return jsonify({"status": "erfolg", "version": tisch.version})
+
+
+@app.route('/api/tisch/<code>/starten', methods=['POST'])
+def tisch_starten(code):
+    tisch, _ = _tisch_und_token(code)
+    tisch.starten()
+    _tisch_speichern(tisch)
+    return jsonify({"status": "erfolg", "version": tisch.version})
+
+
+@app.route('/api/tisch/<code>/naechstes', methods=['POST'])
+def tisch_naechstes_spiel(code):
+    tisch, _ = _tisch_und_token(code)
+    tisch.naechstes_spiel()
+    _tisch_speichern(tisch)
+    return jsonify({"status": "erfolg", "version": tisch.version})
+
+
+@app.route('/api/tisch/<code>/zustand', methods=['GET'])
+def tisch_zustand(code):
+    tisch, token = _tisch_und_teilnehmer(code)
+    aufdecken = _parse_bool_query_param(request.args.get('aufdecken')) or False
+    return jsonify(tisch.sicht_fuer(token, aufdecken))
+
+
+@app.route('/api/tisch/<code>/aktion', methods=['POST'])
+def tisch_aktion(code):
+    # Zuschauende kommen bis hierher, damit Tisch.aktion() ihnen erklaeren
+    # kann, dass sie ab dem naechsten Spiel dabei sind - statt eines nackten
+    # "du sitzt nicht an diesem Tisch".
+    tisch, token = _tisch_und_teilnehmer(code)
+    daten = request.get_json(silent=True) or {}
+    name = daten.get("aktion")
+    if not name:
+        raise RegelFehler("Es fehlt die Angabe, welche Aktion gemeint ist.")
+
+    ergebnis = tisch.aktion(token, name, daten.get("daten"))
+
+    # Ist ein Spiel zu Ende, wandert es sofort in dieselbe Tabelle wie die
+    # von Hand eingetragenen Spiele - nur mit quelle = 'remote'.
+    if ergebnis.get("beendet"):
+        spiel_id = _spiel_zeile_speichern(ergebnis["beendet"])
+        _protokolliere_still(tisch, spiel_id)
+
+    _tisch_speichern(tisch)
+    return jsonify({
+        "status": "erfolg",
+        "version": tisch.version,
+        "beendet": ergebnis.get("beendet"),
+    })
+
+
+def _spiel_zeile_speichern(zeile):
+    """Schreibt ein remote gespieltes Spiel in die Tabelle ``spiel``.
+
+    Gibt die vergebene id zurueck - das Protokoll in der zweiten Datenbank
+    verweist darauf.
+    """
+    verbindung = hole_verbindung()
+    zeiger = verbindung.execute(
+        """
+        INSERT INTO spiel (
+            aktive_spieler_ids, geber_id, einzelspieler_id,
+            spielart, reizwert, spitzen, hand, ouvert,
+            schneider_angesagt, schwarz_angesagt, schwarz_erreicht,
+            augen, spielwert, quelle, sitzung_id
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            zeile["aktive_spieler_ids"], zeile["geber_id"], zeile["einzelspieler_id"],
+            zeile["spielart"], zeile["reizwert"], zeile["spitzen"],
+            zeile["hand"], zeile["ouvert"], zeile["schneider_angesagt"],
+            zeile["schwarz_angesagt"], zeile["schwarz_erreicht"],
+            zeile["augen"], zeile["spielwert"], zeile["quelle"],
+            zeile["sitzung_id"],
+        ),
+    )
+    spiel_id = zeiger.lastrowid
+    verbindung.commit()
+    verbindung.close()
+    _undo_verbraucht.discard(zeile["sitzung_id"])
+    return spiel_id
+
+
+@app.route('/api/tisch/<code>/lobby', methods=['POST'])
+def tisch_zurueck_in_die_lobby(code):
+    """Beendet die Runde und gibt die Aufstellung wieder frei."""
+    tisch, token = _tisch_und_token(code)
+    tisch.zurueck_in_die_lobby(token)
+    _tisch_speichern(tisch)
+    return jsonify({"status": "erfolg", "phase": tisch.phase, "version": tisch.version})
+
+
+@app.route('/api/tisch/<code>/verlassen', methods=['POST'])
+def tisch_verlassen(code):
+    """Gibt den eigenen Platz frei. Zuschauende koennen jederzeit gehen."""
+    tisch, token = _tisch_und_teilnehmer(code)
+    tisch.verlassen(token)
+    _tisch_speichern(tisch)
+    return jsonify({"status": "erfolg", "version": tisch.version})
+
+
+@app.route('/api/tisch/<code>/entfernen', methods=['POST'])
+def tisch_spieler_entfernen(code):
+    """Entfernt eine offline gegangene Spielerin und gibt sofort neu."""
+    tisch, token = _tisch_und_token(code)
+    daten = request.get_json(silent=True) or {}
+    spieler_id = daten.get("spieler_id")
+    if spieler_id is None:
+        raise RegelFehler("Es fehlt die Angabe, wer entfernt werden soll.")
+
+    ergebnis = tisch.spieler_entfernen(token, int(spieler_id))
+    _tisch_speichern(tisch)
+    return jsonify(dict(ergebnis, status="erfolg", phase=tisch.phase,
+                        version=tisch.version))
+
+
+@app.route('/api/tisch/<code>/undo', methods=['POST'])
+def tisch_undo(code):
+    """Nimmt das zuletzt an diesem Tisch gespielte Spiel zurück."""
+    tisch, _ = _tisch_und_token(code)
+
+    # Erst prüfen, ob der Tisch überhaupt zurücknehmen darf - sonst wäre die
+    # Zeile schon gelöscht, während der Tisch unverändert bliebe.
+    tisch.zuruecknehmen_pruefen()
+
+    antwort, status = _spiel_zuruecknehmen(tisch.sitzung_id)
+    if status != 200:
+        return jsonify(antwort), status
+
+    tisch.letztes_spiel_zuruecknehmen()
+    _verlauf_zuruecknehmen_still(antwort["entfernte_spiel_id"])
+    _tisch_speichern(tisch)
+    return jsonify(dict(antwort, version=tisch.version)), 200
+
+
+def _protokolliere_still(tisch, spiel_id):
+    """Schreibt den Spielverlauf ins Zweitprotokoll.
+
+    Bewusst abgesichert: das Protokoll ist eine Zugabe. Geht dabei etwas
+    schief, ist das Spiel trotzdem gespielt und in skat_daten.db gezaehlt -
+    der Tisch darf daran nicht haengenbleiben.
+    """
+    try:
+        return verlauf_modul.protokolliere(tisch, spiel_id)
+    except Exception:
+        app.logger.exception("Spielverlauf konnte nicht protokolliert werden")
+        return None
+
+
+def _verlauf_zuruecknehmen_still(spiel_id):
+    try:
+        verlauf_modul.als_zurueckgenommen_markieren(spiel_id)
+    except Exception:
+        app.logger.exception("Zuruecknahme konnte im Protokoll nicht vermerkt werden")
+
+
+@app.route('/api/tisch/<code>/ereignisse', methods=['GET'])
+def tisch_ereignisse(code):
+    """Server-Sent-Events: schiebt bei jeder Zustandsaenderung die neue Sicht.
+
+    Jede Spielerin bekommt ihre eigene, gefilterte Sicht - der Strom ist kein
+    Rundruf eines gemeinsamen Zustands.
+    """
+    tisch, token = _tisch_und_teilnehmer(code)
+    aufdecken = _parse_bool_query_param(request.args.get('aufdecken')) or False
+    tisch_code = tisch.code
+
+    def strom():
+        letzte_version = None
+        letztes_lebenszeichen = time.time()
+        while True:
+            aktueller = _tisch_holen(tisch_code)
+            if aktueller is None:
+                yield "event: ende\ndata: {}\n\n"
+                return
+
+            # Der offene Strom IST das Lebenszeichen. Ohne diese Zeile gälten
+            # alle als offline, sobald eine Weile niemand am Zug ist - denn
+            # ohne Zustandsänderung würde auch keine Sicht berechnet.
+            aktueller.gesehen(token)
+
+            # Fällt dabei auf, dass jemand offline gegangen ist, zählt das als
+            # Zustandsänderung: die anderen sollen den Hinweis sofort sehen.
+            aktueller.verbindungen_pruefen()
+
+            if aktueller.spieler_nach_token(token) is None:
+                # Zwischenzeitlich vom Tisch entfernt worden.
+                yield "event: ende\ndata: {}\n\n"
+                return
+
+            if aktueller.version != letzte_version:
+                letzte_version = aktueller.version
+                nutzlast = json.dumps(aktueller.sicht_fuer(token, aufdecken))
+                yield f"event: zustand\ndata: {nutzlast}\n\n"
+                letztes_lebenszeichen = time.time()
+            elif time.time() - letztes_lebenszeichen > _SSE_PING_SEKUNDEN:
+                # Kommentarzeile haelt Proxys und Mobilfunk-NAT offen.
+                yield ": ping\n\n"
+                letztes_lebenszeichen = time.time()
+
+            time.sleep(_SSE_TAKT_SEKUNDEN)
+
+    return Response(
+        strom(),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",   # nginx nicht puffern lassen
+        },
+    )
+
+
 # --- Server Start ---
 
 if __name__ == '__main__':
     # Startet den Server im Entwicklungsmodus auf Port 5000
     print("Starte Skat-Backend auf http://127.0.0.1:5000")
-    app.run(debug=True, port=5000, threaded=False, use_reloader=False)
+    # threaded=True ist noetig: die SSE-Verbindungen bleiben dauerhaft offen.
+    app.run(debug=True, port=5000, threaded=True, use_reloader=False)

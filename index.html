@@ -10,8 +10,11 @@
 </head>
 <body>
 
-    <header>
+    <header class="seiten-kopf">
         <h1>Skat Zähler</h1>
+        <button type="button" id="btn-zurueck-start" style="display: none;">
+            Zurück zur Startseite
+        </button>
     </header>
 
     <main>
@@ -36,6 +39,7 @@
                 <button id="btn-start" disabled>Partie starten</button>
                 <button id="btn-dashboard-only" type="button">Dashboard anzeigen</button>
                 <button id="btn-suche" type="button">Suche</button>
+                <button id="btn-remote" type="button">Remote spielen</button>
             </div>
         </section>
 
@@ -54,10 +58,10 @@
 
                 <label for="spielart">Spielart:</label>
                 <select id="spielart" required>
-                    <option value="Eichel">Eichel (Kreuz)</option>
-                    <option value="Blatt">Blatt (Pik)</option>
+                    <option value="Eichel">Eichel</option>
+                    <option value="Blatt">Blatt</option>
                     <option value="Herz">Herz</option>
-                    <option value="Schell">Schell (Karo)</option>
+                    <option value="Schell">Schell</option>
                     <option value="Grand">Grand</option>
                     <option value="Null">Null</option>
                 </select>

@@ -6,6 +6,19 @@ let gezogenesReihenfolgeElement = null; // Für Drag & Drop der Sitzreihenfolge
 let aktuellesSpielDraft = null; // Zwischenspeicher für die Bestätigungs-Übersicht
 /** Letzte /api/stand-Antwort für die Zeitraum-Punkttabelle (Monat/Woche/Tag/Gesamt). */
 let standZeitraumCache = null;
+/**
+ * Kennung dieser Partie. Sie geht an jedes gespeicherte Spiel mit, damit
+ * "letztes Spiel zurücknehmen" nur die eigene Runde trifft und nicht die
+ * Partie, die gerade an einem anderen Tisch läuft.
+ */
+let sitzungID = null;
+
+function neueSitzungID() {
+    if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+        return `lokal:${window.crypto.randomUUID()}`;
+    }
+    return `lokal:${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
 
 // --- Initialisierung ---
 document.addEventListener('DOMContentLoaded', () => {
@@ -33,6 +46,18 @@ document.addEventListener('DOMContentLoaded', () => {
         btnSuche.addEventListener('click', () => {
             window.location.href = '/suche';
         });
+    }
+
+    const btnRemote = document.getElementById('btn-remote');
+    if (btnRemote) {
+        btnRemote.addEventListener('click', () => {
+            window.location.href = '/spielen';
+        });
+    }
+
+    const btnZurueckStart = document.getElementById('btn-zurueck-start');
+    if (btnZurueckStart) {
+        btnZurueckStart.addEventListener('click', zurueckZurStartseite);
     }
 
     const btnRefreshStand = document.getElementById('btn-refresh-stand');
@@ -115,6 +140,36 @@ function ermittleAktiveIDsAusStartAuswahl() {
     return idsAusListe;
 }
 
+/**
+ * Zeigt den Rückweg, sobald man die Startseite verlassen hat. Auf der
+ * Startseite selbst wäre er sinnlos.
+ */
+function zeigeZurueckKnopf(sichtbar) {
+    const knopf = document.getElementById('btn-zurueck-start');
+    if (knopf) {
+        knopf.style.display = sichtbar ? '' : 'none';
+    }
+}
+
+function zurueckZurStartseite() {
+    // Läuft gerade eine Partie, geht die Runde verloren: Sitzordnung,
+    // Geberin und die Kennung, an der das Zurücknehmen hängt. Bereits
+    // gespeicherte Spiele bleiben natürlich erhalten.
+    const partieLaeuft =
+        document.getElementById('spiel-bereich').style.display !== 'none';
+    if (partieLaeuft) {
+        const frage = 'Zurück zur Startseite?\n\n'
+            + 'Die laufende Partie wird beendet – gespeicherte Spiele bleiben '
+            + 'erhalten, aber Sitzordnung und Geberin beginnen neu.';
+        if (!window.confirm(frage)) {
+            return;
+        }
+    }
+    // Neu laden statt von Hand aufräumen: so bleibt garantiert kein Rest
+    // der alten Runde stehen.
+    window.location.href = '/';
+}
+
 function startePartie() {
     const ids = ermittleAktiveIDsAusStartAuswahl();
     if (!ids) {
@@ -122,11 +177,13 @@ function startePartie() {
     }
 
     aktiveIDs = ids;
+    sitzungID = neueSitzungID();
 
     // UI umschalten
     document.getElementById('setup-bereich').style.display = 'none';
     document.getElementById('spiel-bereich').style.display = 'block';
     document.getElementById('dashboard-bereich').style.display = 'block';
+    zeigeZurueckKnopf(true);
 
     // Einzelspieler-Dropdown initial für die aktuellen aktiven Spielerinnen füllen
     aktualisiereEinzelspielerDropdown();
@@ -139,6 +196,7 @@ function zeigeNurDashboard() {
     document.getElementById('setup-bereich').style.display = 'none';
     document.getElementById('spiel-bereich').style.display = 'none';
     document.getElementById('dashboard-bereich').style.display = 'block';
+    zeigeZurueckKnopf(true);
 
     ladeStand();
 }
@@ -314,7 +372,10 @@ function aktualisiereStandZeitraumTabelle() {
 }
 
 async function ladeStand() {
-    const res = await fetch('/api/stand');
+    const pfad = sitzungID
+        ? `/api/stand?sitzung_id=${encodeURIComponent(sitzungID)}`
+        : '/api/stand';
+    const res = await fetch(pfad);
     const daten = await res.json();
 
     standZeitraumCache = daten;
@@ -334,14 +395,10 @@ async function ladeStand() {
         .join('');
 
     // Undo-Button entsprechend Backend-Info aktivieren/deaktivieren
+    // Der Server entscheidet, ob in DIESER Runde zurückgenommen werden darf.
     const undoButton = document.getElementById('btn-undo-last');
     if (undoButton) {
-        if (typeof daten.undo_moeglich === 'boolean') {
-            undoButton.disabled = !daten.undo_moeglich;
-        } else {
-            // Fallback: erlaubt Undo, solange es mindestens ein Spiel in der Historie gibt
-            undoButton.disabled = !(daten.historie && daten.historie.length > 0);
-        }
+        undoButton.disabled = !daten.undo_moeglich;
     }
 }
 
@@ -426,7 +483,7 @@ async function bestaetigeUndSpeichereSpiel() {
     const res = await fetch('/api/spiel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(aktuellesSpielDraft)
+        body: JSON.stringify(Object.assign({}, aktuellesSpielDraft, { sitzung_id: sitzungID }))
     });
 
     if (res.ok) {
@@ -451,6 +508,7 @@ async function undoLetztesSpiel() {
     const res = await fetch('/api/spiel/undo', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sitzung_id: sitzungID })
     });
 
     const undoButton = document.getElementById('btn-undo-last');
