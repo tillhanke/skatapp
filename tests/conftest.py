@@ -30,9 +30,11 @@ def testdb(tmp_path, monkeypatch):
     # zwischen den Tests zurückgesetzt werden.
     skat_app._tische.clear()
     skat_app._undo_verbraucht.clear()
+    skat_app._schema_geprueft.clear()
     yield pfad
     skat_app._tische.clear()
     skat_app._undo_verbraucht.clear()
+    skat_app._schema_geprueft.clear()
 
 
 @pytest.fixture

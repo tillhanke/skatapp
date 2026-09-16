@@ -7,6 +7,7 @@ import time
 from datetime import date, datetime, timedelta
 from flask import Flask, Response, request, jsonify
 
+import db_setup
 import tisch as tisch_modul
 import verlauf as verlauf_modul
 from skat_engine import RegelFehler
@@ -131,8 +132,34 @@ def hole_punktestand_mit_zeitfilter(cursor, ab_zeitstempel_str):
     return _ergaenze_seeger_fabian([dict(row) for row in cursor.fetchall()])
 
 
+# Je Prozess und Datenbankdatei wird das Schema einmal geprueft.
+_schema_geprueft: set[str] = set()
+
+
+def _schema_sicherstellen():
+    """Zieht eine aeltere Datenbank automatisch nach.
+
+    Frueher musste dafuer von Hand ``db_setup.py init`` laufen. Wer das im
+    Container vergass, bekam beim ersten Remote-Tisch ein "no such table:
+    tisch" um die Ohren - und zwar erst zur Laufzeit. Die Migration ist rein
+    additiv, vorhandene Spiele bleiben unberuehrt.
+    """
+    if DB_DATEI in _schema_geprueft:
+        return
+    try:
+        db_setup.datenbank_initialisieren(DB_DATEI, leise=True)
+    except Exception:
+        # Auch ein nicht beschreibbares Volume landet hier. Die eigentliche
+        # Abfrage scheitert gleich danach mit einer sprechenden Meldung.
+        app.logger.exception("Datenbankschema konnte nicht sichergestellt werden")
+    finally:
+        # Auch nach einem Fehlschlag nicht bei jeder Abfrage erneut versuchen.
+        _schema_geprueft.add(DB_DATEI)
+
+
 def hole_verbindung():
     """Stellt die Verbindung her und erlaubt Spaltenzugriff per Name."""
+    _schema_sicherstellen()
     verbindung = sqlite3.connect(DB_DATEI, check_same_thread=False)
     # WAL erlaubt Lesen waehrend geschrieben wird - noetig, sobald mehrere
     # Remote-Tische gleichzeitig Spiele speichern.

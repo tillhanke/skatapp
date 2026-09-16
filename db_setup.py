@@ -8,11 +8,12 @@ DB_DATEI = os.environ.get("SKAT_DB", "skat_daten.db")
 
 # --- Datenbank-Funktionen ---
 
-def hole_verbindung():
+def hole_verbindung(pfad=None):
     """Stellt die Verbindung zur lokalen SQLite-Datenbank her."""
-    ordner = os.path.dirname(os.path.abspath(DB_DATEI))
+    pfad = pfad or DB_DATEI
+    ordner = os.path.dirname(os.path.abspath(pfad))
     os.makedirs(ordner, exist_ok=True)
-    verbindung = sqlite3.connect(DB_DATEI)
+    verbindung = sqlite3.connect(pfad)
     verbindung.execute("PRAGMA journal_mode=WAL")
     return verbindung
 
@@ -23,7 +24,11 @@ def setze_db_datei(pfad):
     DB_DATEI = pfad
 
 def _spalte_ergaenzen(cursor, tabelle, spalte, definition):
-    """Fügt eine Spalte hinzu, falls sie noch fehlt (idempotente Migration)."""
+    """Fügt eine Spalte hinzu, falls sie noch fehlt (idempotente Migration).
+
+    Die Meldung bleibt auch im "leisen" Modus sichtbar: dass eine bestehende
+    Datenbank nachgezogen wurde, gehört ins Log.
+    """
     vorhanden = {zeile[1] for zeile in cursor.execute(f"PRAGMA table_info({tabelle})")}
     if spalte in vorhanden:
         return False
@@ -32,9 +37,14 @@ def _spalte_ergaenzen(cursor, tabelle, spalte, definition):
     return True
 
 
-def datenbank_initialisieren():
-    """Erstellt die Tabellen, falls sie noch nicht existieren."""
-    verbindung = hole_verbindung()
+def datenbank_initialisieren(pfad=None, leise=False):
+    """Erstellt fehlende Tabellen und Spalten. Mehrfach aufrufbar.
+
+    Rein additiv: vorhandene Daten werden nicht angefasst. Die App ruft das
+    beim ersten Datenbankzugriff selbst auf, damit eine ältere Datenbank nicht
+    von Hand nachgezogen werden muss.
+    """
+    verbindung = hole_verbindung(pfad)
     cursor = verbindung.cursor()
 
     # Tabelle für die Spielerinnen erstellen
@@ -105,7 +115,8 @@ def datenbank_initialisieren():
 
     verbindung.commit()
     verbindung.close()
-    print("Datenbank und Tabellen wurden erfolgreich initialisiert.")
+    if not leise:
+        print("Datenbank und Tabellen wurden erfolgreich initialisiert.")
 
 
 def spieler_hinzufuegen(namen_liste):

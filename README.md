@@ -97,18 +97,28 @@ Die Daten werden in einer lokalen SQLite‑Datei `skat_daten.db` gespeichert.
 
 ### Start mit Docker & Docker Compose
 
-1. **Datenbank vorbereiten (optional aber empfohlen):**
+1. **Datenbank bereitstellen:**
+
+   Die App legt fehlende Tabellen und Spalten beim ersten Zugriff selbst an –
+   eine bestehende Datenbank aus einer älteren Version wird also automatisch
+   nachgezogen, ohne dass etwas von Hand migriert werden muss. Nötig ist nur,
+   dass die Datei im gemounteten Verzeichnis liegt:
 
    ```bash
-   SKAT_DB=data/skat_daten.db python db_setup.py init
+   mkdir -p data
+   mv skat_daten.db data/          # nur beim Umstieg von einem älteren Setup
    ```
 
-   Damit liegt die Datenbank mit der richtigen Struktur unter `data/`. Dieses
-   Verzeichnis wird anschließend in den Container gemountet.
+   Bei einer **ganz neuen** Installation fehlen anschließend nur noch die
+   Spielerinnen – die kann die App nicht erraten:
 
-   > **Umstieg von einem älteren Setup:** Früher wurde die einzelne Datei
-   > `skat_daten.db` gemountet. Einmalig verschieben:
-   > `mkdir -p data && mv skat_daten.db data/`
+   ```bash
+   SKAT_DB=data/skat_daten.db python db_setup.py init --spielerinnen "Anna" "Berta" "Clara"
+   ```
+
+   > Früher wurde die einzelne Datei `skat_daten.db` gemountet. Seit dem
+   > WAL-Modus ist es ein **Verzeichnis**, weil SQLite `-wal` und `-shm`
+   > daneben anlegt.
 
 2. **Container starten:**
 
@@ -144,7 +154,12 @@ Die Daten werden in einer lokalen SQLite‑Datei `skat_daten.db` gespeichert.
   `-shm`‑Dateien neben der Datenbank an. Deshalb wird im Docker‑Setup ein
   **Verzeichnis** (`./data`) gemountet und nicht mehr die einzelne Datei.
 - Beim Betrieb mit Docker wird das Verzeichnis `./data` als Volume eingebunden, damit Daten beim Neustart erhalten bleiben.
-- Das Skript `db_setup.py` richtet die notwendigen Tabellen (z. B. `spieler`, `spiel`) ein. Dieses Skript sollte einmalig vor dem ersten Start ausgeführt werden, sofern die Datenbank noch nicht existiert.
+- Das Schema wird beim ersten Datenbankzugriff automatisch sichergestellt:
+  fehlende Tabellen und Spalten werden ergänzt, vorhandene Daten bleiben
+  unberührt. Ein Aufruf von `db_setup.py init` ist dafür nicht mehr nötig –
+  das Skript dient nur noch dazu, **Spielerinnen** anzulegen.
+- Ergänzte Spalten werden im Log vermerkt
+  (`Migration: Spalte spiel.sitzung_id ergänzt.`).
 
 ---
 
